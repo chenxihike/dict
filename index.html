@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dictation</title>
+<style>
+/* ===== Reset & base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --border: #dde1e7;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --green: #16a34a;
+  --radius: 10px;
+  --shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* ===== Header ===== */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+header h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.lang-select {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.main-tabs {
+  display: flex;
+  gap: 0;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 8px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* ===== Tab panels ===== */
+.tab-panel { display: none; padding: 16px; max-width: 760px; margin: 0 auto; }
+.tab-panel.active { display: block; }
+
+/* ===== Cards ===== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-header h2 { font-size: 1rem; font-weight: 600; }
+
+.section-header.collapsible { cursor: pointer; user-select: none; }
+.chevron { font-size: 1.1rem; transition: transform .2s; }
+.chevron.open { transform: rotate(180deg); }
+
+/* ===== Input tabs ===== */
+.input-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.input-tab-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background .15s, color .15s;
+}
+
+.input-tab-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.input-panel { display: none; }
+.input-panel.active { display: block; }
+
+textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.95rem;
+  resize: vertical;
+  color: var(--text);
+  background: var(--bg);
+  font-family: inherit;
+}
+
+textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+/* File drop */
+.file-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 32px 16px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  transition: border-color .2s, background .2s;
+}
+
+.file-drop:hover, .file-drop.drag-over {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+
+.drop-icon { font-size: 2rem; }
+
+.status-text { font-size: 0.82rem; color: var(--text-muted); margin-top: 6px; }
+.status-text.error { color: var(--danger); }
+
+/* ===== Settings ===== */
+#settings-body { overflow: hidden; transition: max-height .3s ease; }
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 540px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+.setting-group label {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.setting-group label strong { color: var(--text); }
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.toggle-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.toggle-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.82rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background .15s, color .15s, border-color .15s;
+  min-height: 44px;
+}
+
+.toggle-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+/* ===== Playback ===== */
+.display-box {
+  text-align: center;
+  padding: 24px 16px 16px;
+  position: relative;
+}
+
+.current-item {
+  font-size: 2.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  min-height: 3.5rem;
+  transition: filter .2s;
+}
+
+.current-item.hidden-text { filter: blur(12px); user-select: none; }
+
+@media (min-width: 600px) {
+  .current-item { font-size: 3.5rem; }
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+#progress-text { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
+
+.progress-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width .3s;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, opacity .15s, transform .1s;
+  white-space: nowrap;
+  min-height: 44px;
+  min-width: 44px;
+  font-family: inherit;
+}
+
+.btn:active { transform: scale(0.96); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+.btn-secondary { background: var(--bg); border-color: var(--border); color: var(--text); }
+.btn-secondary:hover:not(:disabled) { background: #e9ecf0; }
+
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: var(--danger-hover); }
+
+.btn-ghost { background: none; color: var(--text-muted); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+
+.btn-icon { font-size: 1.3rem; padding: 8px 14px; }
+.btn-sm { font-size: 0.8rem; padding: 5px 12px; min-height: 34px; }
+.btn-lg { font-size: 1.1rem; padding: 14px 28px; min-height: 52px; }
+
+.empty-note { color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 16px 0; }
+
+/* ===== Help menu ===== */
+.help-menu-wrap {
+  position: relative;
+}
+
+.help-menu-btn {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 8px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.help-menu-btn:hover { color: var(--primary); }
+
+.help-menu-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  min-width: 140px;
+  z-index: 300;
+}
+.help-menu-dropdown.open { display: block; }
+
+.help-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.help-menu-item:hover { background: var(--bg); color: var(--primary); }
+.help-menu-item + .help-menu-item { border-top: 1px solid var(--border); }
+
+/* ===== Modal ===== */
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 400;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-backdrop.open { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { font-size: 1.05rem; font-weight: 700; }
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.modal-close:hover { background: var(--bg); color: var(--text); }
+
+.modal-body {
+  padding: 18px 20px 20px;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.modal-body h3 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--primary);
+  margin: 16px 0 6px;
+}
+.modal-body h3:first-child { margin-top: 0; }
+
+.modal-body p { margin-bottom: 8px; color: var(--text); }
+.modal-body ul { padding-left: 18px; margin-bottom: 8px; }
+.modal-body li { margin-bottom: 4px; }
+
+.modal-body .about-center {
+  text-align: center;
+  padding: 8px 0;
+}
+.modal-body .about-app-name {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.modal-body .about-copy {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 6px;
+}
+</style>
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <h1 data-i18n="appTitle">Dictation</h1>
+      <select id="lang-select" class="lang-select">
+        <option value="en">English</option>
+        <option value="fr">Français</option>
+        <option value="zh">中文</option>
+        <option value="es">Español</option>
+        <option value="de">Deutsch</option>
+      </select>
+    </div>
+    <nav class="main-tabs">
+      <button class="tab-btn active" data-tab="dictation" data-i18n="tabDictation">Dictation</button>
+      <div class="help-menu-wrap">
+        <button class="help-menu-btn" id="help-menu-btn" data-i18n="menuHelp">Help</button>
+        <div class="help-menu-dropdown" id="help-menu-dropdown">
+          <button class="help-menu-item" id="open-help" data-i18n="menuHowTo">How to use</button>
+          <button class="help-menu-item" id="open-about" data-i18n="menuAbout">About</button>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <!-- ===== DICTATION TAB ===== -->
+  <main id="tab-dictation" class="tab-panel active">
+
+    <section class="card" id="input-section">
+      <div class="section-header">
+        <h2 data-i18n="sectionContent">Content</h2>
+        <nav class="input-tabs">
+          <button class="input-tab-btn active" data-input="text" data-i18n="inputPasteText">Paste Text</button>
+          <button class="input-tab-btn" data-input="file" data-i18n="inputUploadFile">Upload File</button>
+        </nav>
+      </div>
+
+      <div id="input-text" class="input-panel active">
+        <textarea id="text-input" data-i18n-placeholder="textareaPlaceholder" placeholder="Paste or type your text here…" rows="6"></textarea>
+      </div>
+
+      <div id="input-file" class="input-panel">
+        <label class="file-drop" id="file-drop">
+          <input type="file" id="file-input" accept=".txt,.text" hidden>
+          <span class="drop-icon">📂</span>
+          <span id="drop-text" data-i18n-html="dropText">Drop a .txt file here or <u>click to browse</u></span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="card" id="settings-section">
+      <div class="section-header collapsible" id="settings-toggle">
+        <h2 data-i18n="sectionSettings">Settings</h2>
+        <span class="chevron">▾</span>
+      </div>
+      <div id="settings-body">
+        <div class="settings-grid">
+          <div class="setting-group">
+            <label data-i18n="labelMode">Mode</label>
+            <div class="toggle-group">
+              <button class="toggle-btn active" data-mode="word" data-i18n="modeWord">Word by Word</button>
+              <button class="toggle-btn" data-mode="sentence" data-i18n="modeSentence">Sentence by Sentence</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label><span data-i18n="labelPause">Pause between items:</span> <strong id="pause-val">2.0</strong>s</label>
+            <input type="range" id="pause-slider" min="0.5" max="10" step="0.5" value="2">
+          </div>
+
+          <div class="setting-group">
+            <label><span data-i18n="labelRepeat">Repeat each item:</span> <strong id="repeat-val">1</strong>×</label>
+            <input type="range" id="repeat-slider" min="1" max="5" step="1" value="1">
+          </div>
+
+          <div class="setting-group">
+            <label for="voice-select" data-i18n="labelVoice">Voice</label>
+            <select id="voice-select">
+              <option data-i18n="voiceLoading">Loading…</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <label><span data-i18n="labelRate">Speech Rate:</span> <strong id="rate-val">0.9</strong>×</label>
+            <input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="0.9">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Playback -->
+    <section class="card" id="playback-section">
+      <div class="display-box">
+        <div id="current-item" class="current-item hidden-text" data-hidden="true">—</div>
+        <button id="reveal-btn" class="btn btn-ghost btn-sm" data-i18n="btnShow">Show</button>
+      </div>
+
+      <div class="progress-row">
+        <span id="progress-text">0 / 0</span>
+        <div class="progress-bar-wrap">
+          <div id="progress-bar" class="progress-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="prev-btn" class="btn btn-icon" title="Previous" disabled>⏮</button>
+        <button id="play-btn" class="btn btn-primary btn-icon" title="Play">▶</button>
+        <button id="pause-btn" class="btn btn-icon" title="Pause" disabled>⏸</button>
+        <button id="stop-btn" class="btn btn-icon" title="Stop" disabled>⏹</button>
+        <button id="next-btn" class="btn btn-icon" title="Next" disabled>⏭</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== HELP MODAL ===== -->
+  <div class="modal-backdrop" id="help-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+      <div class="modal-header">
+        <h2 id="help-modal-title" data-i18n="helpTitle">Help</h2>
+        <button class="modal-close" data-close="help-modal">&times;</button>
+      </div>
+      <div class="modal-body" id="help-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ===== ABOUT MODAL ===== -->
+  <div class="modal-backdrop" id="about-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+      <div class="modal-header">
+        <h2 id="about-modal-title" data-i18n="aboutTitle">About</h2>
+        <button class="modal-close" data-close="about-modal">&times;</button>
+      </div>
+      <div class="modal-body" id="about-modal-body"></div>
+    </div>
+  </div>
+
+<script>
+/* ===== Dictation App - client-only ===== */
+
+
+// ----- Globals -----
+let dictationItems = [];
+let currentIndex = 0;
+let isPlaying = false;
+let isPaused = false;
+let stopRequested = false;
+let pauseResolve = null;
+
+let dictationMode = 'word';
+let pauseDuration = 2000;
+let repeatCount = 1;
+let speechRate = 0.9;
+let selectedVoice = null;
+
+// ----- DOM helpers -----
+const $ = id => document.getElementById(id);
+const qs = (sel, ctx = document) => ctx.querySelector(sel);
+const qsa = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+
+// ----- Internationalisation -----
+const TRANSLATIONS = {
+  en: {
+    appTitle: 'Dictation',
+    tabDictation: 'Dictation',
+    sectionContent: 'Content',
+    inputPasteText: 'Paste Text',
+    inputUploadFile: 'Upload File',
+    textareaPlaceholder: 'Paste or type your text here…',
+    dropText: 'Drop a .txt file here or <u>click to browse</u>',
+    sectionSettings: 'Settings',
+    labelMode: 'Mode',
+    modeWord: 'Word by Word',
+    modeSentence: 'Sentence by Sentence',
+    labelPause: 'Pause between items:',
+    labelRepeat: 'Repeat each item:',
+    labelVoice: 'Voice',
+    voiceLoading: 'Loading…',
+    voiceNoMatches: 'No matches',
+    labelRate: 'Speech Rate:',
+    browserVoices: 'Browser Voices',
+    btnShow: 'Show',
+    btnHide: 'Hide',
+    btnResume: '▶ Resume',
+    alertNoText: 'Please enter or load some text first.',
+    menuHelp: 'Help',
+    menuHowTo: 'How to use',
+    menuAbout: 'About',
+    helpTitle: 'Help',
+    aboutTitle: 'About',
+  },
+  fr: {
+    appTitle: 'Dictée',
+    tabDictation: 'Dictée',
+    sectionContent: 'Contenu',
+    inputPasteText: 'Coller du texte',
+    inputUploadFile: 'Télécharger un fichier',
+    textareaPlaceholder: 'Collez ou tapez votre texte ici…',
+    dropText: 'Déposez un fichier .txt ici ou <u>cliquez pour parcourir</u>',
+    sectionSettings: 'Paramètres',
+    labelMode: 'Mode',
+    modeWord: 'Mot par mot',
+    modeSentence: 'Phrase par phrase',
+    labelPause: 'Pause entre les éléments :',
+    labelRepeat: 'Répéter chaque élément :',
+    labelVoice: 'Voix',
+    voiceLoading: 'Chargement…',
+    voiceNoMatches: 'Aucun résultat',
+    labelRate: 'Vitesse de parole :',
+    browserVoices: 'Voix du navigateur',
+    btnShow: 'Afficher',
+    btnHide: 'Masquer',
+    btnResume: '▶ Reprendre',
+    alertNoText: 'Veuillez d\'abord saisir ou charger du texte.',
+    menuHelp: 'Aide',
+    menuHowTo: 'Comment utiliser',
+    menuAbout: 'À propos',
+    helpTitle: 'Aide',
+    aboutTitle: 'À propos',
+  },
+  zh: {
+    appTitle: '听写',
+    tabDictation: '听写',
+    sectionContent: '内容',
+    inputPasteText: '粘贴文本',
+    inputUploadFile: '上传文件',
+    textareaPlaceholder: '在此粘贴或输入文本…',
+    dropText: '将 .txt 文件拖放到此处或<u>点击浏览</u>',
+    sectionSettings: '设置',
+    labelMode: '模式',
+    modeWord: '逐词',
+    modeSentence: '逐句',
+    labelPause: '每项暂停：',
+    labelRepeat: '每项重复：',
+    labelVoice: '声音',
+    voiceLoading: '加载中…',
+    voiceNoMatches: '无匹配项',
+    labelRate: '语速：',
+    browserVoices: '浏览器声音',
+    btnShow: '显示',
+    btnHide: '隐藏',
+    btnResume: '▶ 继续',
+    alertNoText: '请先输入或加载文本。',
+    menuHelp: '帮助',
+    menuHowTo: '使用说明',
+    menuAbout: '关于',
+    helpTitle: '帮助',
+    aboutTitle: '关于',
+  },
+  es: {
+    appTitle: 'Dictado',
+    tabDictation: 'Dictado',
+    sectionContent: 'Contenido',
+    inputPasteText: 'Pegar texto',
+    inputUploadFile: 'Subir archivo',
+    textareaPlaceholder: 'Pega o escribe tu texto aquí…',
+    dropText: 'Suelta un archivo .txt aquí o <u>haz clic para buscar</u>',
+    sectionSettings: 'Configuración',
+    labelMode: 'Modo',
+    modeWord: 'Palabra por palabra',
+    modeSentence: 'Frase por frase',
+    labelPause: 'Pausa entre elementos:',
+    labelRepeat: 'Repetir cada elemento:',
+    labelVoice: 'Voz',
+    voiceLoading: 'Cargando…',
+    voiceNoMatches: 'Sin resultados',
+    labelRate: 'Velocidad de habla:',
+    browserVoices: 'Voces del navegador',
+    btnShow: 'Mostrar',
+    btnHide: 'Ocultar',
+    btnResume: '▶ Reanudar',
+    alertNoText: 'Por favor, introduce o carga texto primero.',
+    menuHelp: 'Ayuda',
+    menuHowTo: 'Cómo usar',
+    menuAbout: 'Acerca de',
+    helpTitle: 'Ayuda',
+    aboutTitle: 'Acerca de',
+  },
+  de: {
+    appTitle: 'Diktat',
+    tabDictation: 'Diktat',
+    sectionContent: 'Inhalt',
+    inputPasteText: 'Text einfügen',
+    inputUploadFile: 'Datei hochladen',
+    textareaPlaceholder: 'Text hier einfügen oder eingeben…',
+    dropText: '.txt-Datei hier ablegen oder <u>zum Durchsuchen klicken</u>',
+    sectionSettings: 'Einstellungen',
+    labelMode: 'Modus',
+    modeWord: 'Wort für Wort',
+    modeSentence: 'Satz für Satz',
+    labelPause: 'Pause zwischen Elementen:',
+    labelRepeat: 'Jedes Element wiederholen:',
+    labelVoice: 'Stimme',
+    voiceLoading: 'Wird geladen…',
+    voiceNoMatches: 'Keine Treffer',
+    labelRate: 'Sprechgeschwindigkeit:',
+    browserVoices: 'Browser-Stimmen',
+    btnShow: 'Anzeigen',
+    btnHide: 'Ausblenden',
+    btnResume: '▶ Fortsetzen',
+    alertNoText: 'Bitte zuerst Text eingeben oder laden.',
+    menuHelp: 'Hilfe',
+    menuHowTo: 'Anleitung',
+    menuAbout: 'Über',
+    helpTitle: 'Hilfe',
+    aboutTitle: 'Über',
+  },
+};
+
+let currentLang = 'en';
+
+function t(key) {
+  return (TRANSLATIONS[currentLang] || TRANSLATIONS.en)[key] ?? TRANSLATIONS.en[key] ?? key;
+}
+
+function applyLang() {
+  document.documentElement.lang = currentLang;
+  document.title = t('appTitle');
+  qsa('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  qsa('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+  qsa('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+
+  // Recalculate settings collapse height in case text reflow changed it
+  const body = $('settings-body');
+  if (body && body.style.maxHeight !== '0px') {
+    body.style.maxHeight = 'none';
+    body.style.maxHeight = body.scrollHeight + 'px';
+  }
+}
+
+function initLang() {
+  // Auto-detect from browser if no saved preference
+  const saved = localStorage.getItem('lang');
+  if (saved && TRANSLATIONS[saved]) {
+    currentLang = saved;
+  } else {
+    const browserLang = navigator.language.split('-')[0];
+    currentLang = TRANSLATIONS[browserLang] ? browserLang : 'en';
+  }
+
+  const sel = $('lang-select');
+  sel.value = currentLang;
+  sel.addEventListener('change', () => {
+    currentLang = sel.value;
+    localStorage.setItem('lang', currentLang);
+    applyLang();
+    autoSelectVoiceForLang(currentLang);
+  });
+
+  applyLang();
+}
+
+// ----- Init -----
+document.addEventListener('DOMContentLoaded', () => {
+  initLang();
+  initTabs();
+  initInputTabs();
+  initFileUpload();
+  initSettings();
+  initPlayback();
+  loadBrowserVoices();
+  initSettingsCollapse();
+  initHelpMenu();
+});
+
+// ----- Help menu & modals -----
+const HELP_CONTENT = {
+  en: `
+    <h3>What is this?</h3>
+    <p>Dictation is a practice tool that reads your text aloud word-by-word or sentence-by-sentence, so you can write down what you hear — just like a classroom dictation exercise.</p>
+    <h3>Getting started</h3>
+    <ul>
+      <li>Paste or type text in the <strong>Content</strong> box, or upload a <strong>.txt file</strong>.</li>
+      <li>Press <strong>▶ Play</strong> to start. The app will speak each item and pause before moving to the next.</li>
+      <li>Use <strong>Show / Hide</strong> to reveal or conceal the current word or sentence on screen.</li>
+    </ul>
+    <h3>Settings</h3>
+    <ul>
+      <li><strong>Mode</strong> — Word by Word or Sentence by Sentence.</li>
+      <li><strong>Pause</strong> — gap between items (0.5 s – 10 s).</li>
+      <li><strong>Repeat</strong> — how many times each item is spoken before moving on.</li>
+      <li><strong>Voice</strong> — choose any voice installed on your device.</li>
+      <li><strong>Speech Rate</strong> — slow down or speed up the voice.</li>
+    </ul>
+    <h3>Playback controls</h3>
+    <ul>
+      <li><strong>⏮ / ⏭</strong> — jump to the previous or next item.</li>
+      <li><strong>⏸</strong> — pause and resume.</li>
+      <li><strong>⏹</strong> — stop and reset.</li>
+    </ul>`,
+  fr: `
+    <h3>À quoi ça sert ?</h3>
+    <p>Dictée est un outil d'entraînement qui lit votre texte à voix haute mot par mot ou phrase par phrase, pour que vous puissiez écrire ce que vous entendez.</p>
+    <h3>Démarrage</h3>
+    <ul>
+      <li>Collez ou tapez du texte dans la zone <strong>Contenu</strong>, ou importez un <strong>fichier .txt</strong>.</li>
+      <li>Appuyez sur <strong>▶ Lecture</strong> pour commencer.</li>
+      <li>Utilisez <strong>Afficher / Masquer</strong> pour révéler ou cacher le mot ou la phrase en cours.</li>
+    </ul>
+    <h3>Paramètres</h3>
+    <ul>
+      <li><strong>Mode</strong> — Mot par mot ou Phrase par phrase.</li>
+      <li><strong>Pause</strong> — délai entre les éléments.</li>
+      <li><strong>Répétition</strong> — nombre de répétitions avant de passer à la suite.</li>
+      <li><strong>Voix</strong> — choisissez une voix installée sur l'appareil.</li>
+      <li><strong>Vitesse</strong> — ralentir ou accélérer la voix.</li>
+    </ul>
+    <h3>Contrôles de lecture</h3>
+    <ul>
+      <li><strong>⏮ / ⏭</strong> — élément précédent / suivant.</li>
+      <li><strong>⏸</strong> — pause et reprise.</li>
+      <li><strong>⏹</strong> — arrêt et réinitialisation.</li>
+    </ul>`,
+  zh: `
+    <h3>这是什么？</h3>
+    <p>听写是一款练习工具，逐词或逐句朗读您的文本，让您像课堂听写一样边听边写。</p>
+    <h3>快速开始</h3>
+    <ul>
+      <li>在<strong>内容</strong>框中粘贴或输入文本，或上传 <strong>.txt 文件</strong>。</li>
+      <li>按 <strong>▶ 播放</strong> 开始，应用将朗读每个项目并在继续之前暂停。</li>
+      <li>使用<strong>显示 / 隐藏</strong>按钮来显示或隐藏当前词句。</li>
+    </ul>
+    <h3>设置说明</h3>
+    <ul>
+      <li><strong>模式</strong> — 逐词或逐句。</li>
+      <li><strong>暂停</strong> — 每项之间的间隔时间。</li>
+      <li><strong>重复</strong> — 每项朗读次数。</li>
+      <li><strong>声音</strong> — 选择设备上安装的语音。</li>
+      <li><strong>语速</strong> — 加快或减慢朗读速度。</li>
+    </ul>
+    <h3>播放控制</h3>
+    <ul>
+      <li><strong>⏮ / ⏭</strong> — 上一个 / 下一个。</li>
+      <li><strong>⏸</strong> — 暂停与继续。</li>
+      <li><strong>⏹</strong> — 停止并重置。</li>
+    </ul>`,
+  es: `
+    <h3>¿Para qué sirve?</h3>
+    <p>Dictado es una herramienta de práctica que lee tu texto en voz alta palabra por palabra o frase por frase, para que puedas escribir lo que escuchas.</p>
+    <h3>Primeros pasos</h3>
+    <ul>
+      <li>Pega o escribe texto en el cuadro <strong>Contenido</strong>, o sube un <strong>archivo .txt</strong>.</li>
+      <li>Pulsa <strong>▶ Reproducir</strong> para empezar.</li>
+      <li>Usa <strong>Mostrar / Ocultar</strong> para ver o esconder la palabra o frase actual.</li>
+    </ul>
+    <h3>Ajustes</h3>
+    <ul>
+      <li><strong>Modo</strong> — Palabra por palabra o Frase por frase.</li>
+      <li><strong>Pausa</strong> — tiempo entre elementos.</li>
+      <li><strong>Repetir</strong> — veces que se repite cada elemento.</li>
+      <li><strong>Voz</strong> — elige una voz instalada en tu dispositivo.</li>
+      <li><strong>Velocidad</strong> — ralentiza o acelera la voz.</li>
+    </ul>
+    <h3>Controles de reproducción</h3>
+    <ul>
+      <li><strong>⏮ / ⏭</strong> — elemento anterior / siguiente.</li>
+      <li><strong>⏸</strong> — pausa y reanuda.</li>
+      <li><strong>⏹</strong> — detiene y reinicia.</li>
+    </ul>`,
+  de: `
+    <h3>Wofür ist das?</h3>
+    <p>Diktat ist ein Übungswerkzeug, das Ihren Text Wort für Wort oder Satz für Satz vorliest, damit Sie schreiben können, was Sie hören.</p>
+    <h3>Erste Schritte</h3>
+    <ul>
+      <li>Text in das Feld <strong>Inhalt</strong> einfügen oder eine <strong>.txt-Datei</strong> hochladen.</li>
+      <li><strong>▶ Wiedergabe</strong> drücken, um zu beginnen.</li>
+      <li><strong>Anzeigen / Ausblenden</strong> nutzen, um das aktuelle Wort oder den Satz ein- oder auszublenden.</li>
+    </ul>
+    <h3>Einstellungen</h3>
+    <ul>
+      <li><strong>Modus</strong> — Wort für Wort oder Satz für Satz.</li>
+      <li><strong>Pause</strong> — Abstand zwischen den Elementen.</li>
+      <li><strong>Wiederholen</strong> — wie oft jedes Element gesprochen wird.</li>
+      <li><strong>Stimme</strong> — eine auf dem Gerät installierte Stimme wählen.</li>
+      <li><strong>Geschwindigkeit</strong> — Sprache verlangsamen oder beschleunigen.</li>
+    </ul>
+    <h3>Wiedergabe-Steuerung</h3>
+    <ul>
+      <li><strong>⏮ / ⏭</strong> — vorheriges / nächstes Element.</li>
+      <li><strong>⏸</strong> — Pause und Fortsetzen.</li>
+      <li><strong>⏹</strong> — Stopp und Zurücksetzen.</li>
+    </ul>`,
+};
+
+const ABOUT_CONTENT = {
+  en: `<div class="about-center">
+    <div class="about-app-name">Dictation</div>
+    <div class="about-copy">
+      <p>A free, offline dictation practice tool.<br>Runs entirely in your browser — no data is sent anywhere.</p>
+      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>All rights reserved.</p>
+    </div>
+  </div>`,
+  fr: `<div class="about-center">
+    <div class="about-app-name">Dictée</div>
+    <div class="about-copy">
+      <p>Un outil de dictée gratuit et hors ligne.<br>Fonctionne entièrement dans votre navigateur.</p>
+      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>Tous droits réservés.</p>
+    </div>
+  </div>`,
+  zh: `<div class="about-center">
+    <div class="about-app-name">听写</div>
+    <div class="about-copy">
+      <p>免费离线听写练习工具。<br>完全在浏览器中运行，不发送任何数据。</p>
+      <p style="margin-top:16px;">版权所有 &copy; 2026 <strong>陈希</strong><br>保留所有权利。</p>
+    </div>
+  </div>`,
+  es: `<div class="about-center">
+    <div class="about-app-name">Dictado</div>
+    <div class="about-copy">
+      <p>Una herramienta de dictado gratuita y sin conexión.<br>Funciona completamente en tu navegador.</p>
+      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>Todos los derechos reservados.</p>
+    </div>
+  </div>`,
+  de: `<div class="about-center">
+    <div class="about-app-name">Diktat</div>
+    <div class="about-copy">
+      <p>Ein kostenloses, offline Diktat-Übungswerkzeug.<br>Läuft vollständig im Browser.</p>
+      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>Alle Rechte vorbehalten.</p>
+    </div>
+  </div>`,
+};
+
+function openModal(id) {
+  $('help-menu-dropdown').classList.remove('open');
+  if (id === 'help-modal') {
+    $('help-modal-body').innerHTML = HELP_CONTENT[currentLang] || HELP_CONTENT.en;
+  } else {
+    $('about-modal-body').innerHTML = ABOUT_CONTENT[currentLang] || ABOUT_CONTENT.en;
+  }
+  $(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+  $(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function initHelpMenu() {
+  const btn = $('help-menu-btn');
+  const dropdown = $('help-menu-dropdown');
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    dropdown.classList.toggle('open');
+  });
+
+  document.addEventListener('pointerdown', e => {
+    if (!btn.parentElement.contains(e.target)) dropdown.classList.remove('open');
+  });
+
+  $('open-help').addEventListener('click', () => openModal('help-modal'));
+  $('open-about').addEventListener('click', () => openModal('about-modal'));
+
+  // Close buttons inside modals
+  qsa('[data-close]').forEach(el => {
+    el.addEventListener('click', () => closeModal(el.dataset.close));
+  });
+
+  // Click backdrop to close
+  qsa('.modal-backdrop').forEach(backdrop => {
+    backdrop.addEventListener('click', e => {
+      if (e.target === backdrop) closeModal(backdrop.id);
+    });
+  });
+
+  // Escape key
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      qsa('.modal-backdrop.open').forEach(m => closeModal(m.id));
+      dropdown.classList.remove('open');
+    }
+  });
+}
+
+// ----- Main tab switching -----
+function initTabs() {
+  qsa('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      qsa('.tab-btn').forEach(b => b.classList.remove('active'));
+      qsa('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      $('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+}
+
+// ----- Input tabs -----
+function initInputTabs() {
+  qsa('.input-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      qsa('.input-tab-btn').forEach(b => b.classList.remove('active'));
+      qsa('.input-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      $('input-' + btn.dataset.input).classList.add('active');
+    });
+  });
+}
+
+// ----- File upload -----
+function initFileUpload() {
+  const drop = $('file-drop');
+  const input = $('file-input');
+
+  drop.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => readFile(input.files[0]));
+
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('drag-over');
+    readFile(e.dataTransfer.files[0]);
+  });
+}
+
+function readFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    $('text-input').value = e.target.result;
+    qsa('.input-tab-btn').forEach(b => b.classList.remove('active'));
+    qsa('.input-panel').forEach(p => p.classList.remove('active'));
+    qs('[data-input="text"]').classList.add('active');
+    $('input-text').classList.add('active');
+  };
+  reader.readAsText(file);
+}
+
+// ----- Settings -----
+function initSettings() {
+  qsa('.toggle-btn[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      qsa('.toggle-btn[data-mode]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      dictationMode = btn.dataset.mode;
+    });
+  });
+
+  const pauseSlider = $('pause-slider');
+  pauseSlider.addEventListener('input', () => {
+    pauseDuration = parseFloat(pauseSlider.value) * 1000;
+    $('pause-val').textContent = parseFloat(pauseSlider.value).toFixed(1);
+  });
+
+  const repeatSlider = $('repeat-slider');
+  repeatSlider.addEventListener('input', () => {
+    repeatCount = parseInt(repeatSlider.value);
+    $('repeat-val').textContent = repeatCount;
+  });
+
+  const rateSlider = $('rate-slider');
+  rateSlider.addEventListener('input', () => {
+    speechRate = parseFloat(rateSlider.value);
+    $('rate-val').textContent = speechRate.toFixed(1);
+  });
+
+}
+
+function initSettingsCollapse() {
+  const toggle = $('settings-toggle');
+  const body = $('settings-body');
+  body.style.maxHeight = body.scrollHeight + 'px';
+
+  toggle.addEventListener('click', () => {
+    const open = body.style.maxHeight !== '0px';
+    body.style.maxHeight = open ? '0px' : body.scrollHeight + 'px';
+    toggle.querySelector('.chevron').classList.toggle('open', !open);
+  });
+}
+
+// Maps UI language codes to BCP-47 prefixes used by TTS voices
+const LANG_TO_VOICE_PREFIX = { en: 'en', fr: 'fr', zh: 'zh', es: 'es', de: 'de' };
+
+function autoSelectVoiceForLang(lang) {
+  const prefix = LANG_TO_VOICE_PREFIX[lang];
+  if (!prefix) return;
+  const voices = speechSynthesis.getVoices();
+  const match = voices.find(v => v.lang.startsWith(prefix));
+  if (!match) return;
+  const idx = voices.indexOf(match);
+  const sel = $('voice-select');
+  sel.value = idx;
+  selectedVoice = match;
+}
+
+// ----- Voice select -----
+function loadBrowserVoices() {
+  function populate() {
+    const voices = speechSynthesis.getVoices();
+    const sel = $('voice-select');
+    const prevName = selectedVoice ? selectedVoice.name : null;
+    sel.innerHTML = '';
+    voices.forEach((v, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${v.name} (${v.lang})${v.default ? ' ★' : ''}`;
+      sel.appendChild(opt);
+    });
+    if (!voices.length) return;
+
+    // Pick voice: restore previous selection, else prefer en-US/en-GB/any-en
+    let pick = prevName ? voices.findIndex(v => v.name === prevName) : -1;
+    if (pick === -1) {
+      pick = voices.findIndex(v => v.lang === 'en-US');
+      if (pick === -1) pick = voices.findIndex(v => v.lang === 'en-GB');
+      if (pick === -1) pick = voices.findIndex(v => /^en/.test(v.lang));
+      if (pick === -1) pick = voices.findIndex(v => v.default);
+      if (pick === -1) pick = 0;
+    }
+    sel.value = pick;
+    selectedVoice = voices[pick];
+  }
+
+  $('voice-select').addEventListener('change', () => {
+    const voices = speechSynthesis.getVoices();
+    selectedVoice = voices[+$('voice-select').value] || null;
+  });
+
+  if (speechSynthesis.getVoices().length) populate();
+  speechSynthesis.onvoiceschanged = populate;
+}
+
+
+// ----- Playback engine -----
+function initPlayback() {
+  $('play-btn').addEventListener('click', startDictation);
+  $('pause-btn').addEventListener('click', togglePause);
+  $('stop-btn').addEventListener('click', stopDictation);
+  $('prev-btn').addEventListener('click', () => jumpTo(currentIndex - 1));
+  $('next-btn').addEventListener('click', () => jumpTo(currentIndex + 1));
+  $('reveal-btn').addEventListener('click', toggleReveal);
+}
+
+function parseContent(text, mode) {
+  if (mode === 'sentence') {
+    return text
+      .replace(/([.!?])\s+/g, '$1\n')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 1);
+  }
+  return text.split(/\s+/).filter(w => w.length > 0);
+}
+
+async function startDictation() {
+  const text = $('text-input').value.trim();
+  if (!text) { alert(t('alertNoText')); return; }
+
+  dictationItems = parseContent(text, dictationMode);
+  if (!dictationItems.length) return;
+
+  currentIndex = 0;
+  isPlaying = true;
+  isPaused = false;
+  stopRequested = false;
+
+  setPlaybackButtons(true);
+  await runDictation();
+}
+
+async function runDictation() {
+  while (currentIndex < dictationItems.length && !stopRequested) {
+    updateDisplay(currentIndex);
+    const item = dictationItems[currentIndex];
+
+    for (let r = 0; r < repeatCount && !stopRequested; r++) {
+      if (isPaused) await waitForResume();
+      if (stopRequested) break;
+      await speakItem(item);
+    }
+
+    if (!stopRequested) {
+      currentIndex++;
+      if (currentIndex < dictationItems.length) {
+        await sleep(pauseDuration);
+      }
+    }
+  }
+
+  if (!stopRequested) finishDictation();
+}
+
+async function speakItem(item) {
+  await speakTTS(item);
+}
+
+function speakTTS(text) {
+  return new Promise(resolve => {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    if (selectedVoice) {
+      utter.voice = selectedVoice;
+      utter.lang = selectedVoice.lang; // required on Android to override system default
+    }
+    utter.rate = speechRate;
+    utter.onend = resolve;
+    utter.onerror = resolve;
+    speechSynthesis.speak(utter);
+  });
+}
+
+function sleep(ms) {
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms);
+    pauseResolve = () => { clearTimeout(timer); resolve(); };
+  }).then(() => { pauseResolve = null; });
+}
+
+function waitForResume() {
+  return new Promise(resolve => { pauseResolve = resolve; });
+}
+
+function togglePause() {
+  if (!isPlaying) return;
+  isPaused = !isPaused;
+  $('pause-btn').textContent = isPaused ? t('btnResume') : '⏸';
+  if (!isPaused && pauseResolve) {
+    const r = pauseResolve;
+    pauseResolve = null;
+    r();
+  }
+}
+
+function stopDictation() {
+  stopRequested = true;
+  isPlaying = false;
+  isPaused = false;
+  speechSynthesis.cancel();
+  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  setPlaybackButtons(false);
+  $('current-item').textContent = '—';
+  $('progress-text').textContent = '0 / 0';
+  $('progress-bar').style.width = '0%';
+}
+
+function finishDictation() {
+  isPlaying = false;
+  setPlaybackButtons(false);
+}
+
+function jumpTo(index) {
+  if (index < 0 || index >= dictationItems.length) return;
+  currentIndex = index;
+  stopRequested = true;
+  speechSynthesis.cancel();
+  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  stopRequested = false;
+  isPaused = false;
+  runDictation();
+}
+
+function updateDisplay(index) {
+  const item = dictationItems[index];
+  const el = $('current-item');
+  el.textContent = item;
+  const hidden = el.dataset.hidden === 'true';
+  el.classList.toggle('hidden-text', hidden);
+
+  const total = dictationItems.length;
+  $('progress-text').textContent = `${index + 1} / ${total}`;
+  $('progress-bar').style.width = ((index + 1) / total * 100) + '%';
+  $('prev-btn').disabled = index === 0;
+  $('next-btn').disabled = index >= total - 1;
+}
+
+function setPlaybackButtons(playing) {
+  $('play-btn').disabled = playing;
+  $('pause-btn').disabled = !playing;
+  $('stop-btn').disabled = !playing;
+  if (!playing) $('pause-btn').textContent = '⏸';
+}
+
+function toggleReveal() {
+  const el = $('current-item');
+  const hidden = el.dataset.hidden === 'true';
+  el.dataset.hidden = hidden ? 'false' : 'true';
+  el.classList.toggle('hidden-text', !hidden);
+  $('reveal-btn').textContent = hidden ? t('btnHide') : t('btnShow');
+}
+
+</script>
+</body>
+</html>
