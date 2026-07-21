@@ -329,6 +329,7 @@ select:focus { outline: 2px solid var(--primary); border-color: transparent; }
 .btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); }
 
 .btn-icon { font-size: 1.3rem; padding: 8px 14px; }
+#repeat-btn.active { background: var(--primary); color: #fff; }
 .btn-sm { font-size: 0.8rem; padding: 5px 12px; min-height: 34px; }
 .btn-lg { font-size: 1.1rem; padding: 14px 28px; min-height: 52px; }
 
@@ -539,6 +540,11 @@ select:focus { outline: 2px solid var(--primary); border-color: transparent; }
           </div>
 
           <div class="setting-group">
+            <label>TTS startup delay: <strong id="tts-delay-val">0</strong>ms</label>
+            <input type="range" id="tts-delay-slider" min="0" max="500" step="50" value="0">
+          </div>
+
+          <div class="setting-group">
             <label for="voice-select" data-i18n="labelVoice">Voice</label>
             <select id="voice-select">
               <option data-i18n="voiceLoading">Loading…</option>
@@ -556,8 +562,8 @@ select:focus { outline: 2px solid var(--primary); border-color: transparent; }
     <!-- Playback -->
     <section class="card" id="playback-section">
       <div class="display-box">
-        <div id="current-item" class="current-item hidden-text" data-hidden="true">—</div>
-        <button id="reveal-btn" class="btn btn-ghost btn-sm" data-i18n="btnShow">Show</button>
+        <div id="current-item" class="current-item" data-hidden="false">—</div>
+        <button id="reveal-btn" class="btn btn-ghost btn-sm" data-i18n="btnHide">Hide</button>
       </div>
 
       <div class="progress-row">
@@ -571,6 +577,7 @@ select:focus { outline: 2px solid var(--primary); border-color: transparent; }
         <button id="prev-btn" class="btn btn-icon" title="Previous" disabled>⏮</button>
         <button id="play-btn" class="btn btn-primary btn-icon" title="Play">▶</button>
         <button id="pause-btn" class="btn btn-icon" title="Pause" disabled>⏸</button>
+        <button id="repeat-btn" class="btn btn-icon" title="Repeat current" disabled>🔁</button>
         <button id="stop-btn" class="btn btn-icon" title="Stop" disabled>⏹</button>
         <button id="next-btn" class="btn btn-icon" title="Next" disabled>⏭</button>
       </div>
@@ -608,11 +615,13 @@ let dictationItems = [];
 let currentIndex = 0;
 let isPlaying = false;
 let isPaused = false;
-let stopRequested = false;
 let pauseResolve = null;
+let dictationGen = 0;      // incremented on each jumpTo/start to cancel prior loop
+let isRepeating = false;   // true while repeat-current loop is active
 
 let dictationMode = 'word';
 let pauseDuration = 2000;
+let ttsDelay = 0;
 let repeatCount = 1;
 let speechRate = 0.9;
 let selectedVoice = null;
@@ -840,16 +849,18 @@ const HELP_CONTENT = {
     </ul>
     <h3>Settings</h3>
     <ul>
-      <li><strong>Mode</strong> — Word by Word or Sentence by Sentence.</li>
+      <li><strong>Mode</strong> — Word by Word or Sentence by Sentence. In sentence mode, the app also pauses at commas.</li>
       <li><strong>Pause</strong> — gap between items (0.5 s – 10 s).</li>
       <li><strong>Repeat</strong> — how many times each item is spoken before moving on.</li>
       <li><strong>Voice</strong> — choose any voice installed on your device.</li>
       <li><strong>Speech Rate</strong> — slow down or speed up the voice.</li>
+      <li><strong>TTS startup delay</strong> — increase if the first word of each item is cut off (browser-dependent).</li>
     </ul>
     <h3>Playback controls</h3>
     <ul>
-      <li><strong>⏮ / ⏭</strong> — jump to the previous or next item.</li>
+      <li><strong>⏮ / ⏭</strong> — jump to the previous or next item, preserving the current play/pause state.</li>
       <li><strong>⏸</strong> — pause and resume.</li>
+      <li><strong>🔁</strong> — loop the current item continuously at the current speed and pause interval. Click <strong>▶</strong> to stop looping and advance to the next item.</li>
       <li><strong>⏹</strong> — stop and reset.</li>
     </ul>`,
   fr: `
@@ -863,16 +874,18 @@ const HELP_CONTENT = {
     </ul>
     <h3>Paramètres</h3>
     <ul>
-      <li><strong>Mode</strong> — Mot par mot ou Phrase par phrase.</li>
+      <li><strong>Mode</strong> — Mot par mot ou Phrase par phrase. En mode phrase, l'application marque aussi une pause aux virgules.</li>
       <li><strong>Pause</strong> — délai entre les éléments.</li>
       <li><strong>Répétition</strong> — nombre de répétitions avant de passer à la suite.</li>
       <li><strong>Voix</strong> — choisissez une voix installée sur l'appareil.</li>
       <li><strong>Vitesse</strong> — ralentir ou accélérer la voix.</li>
+      <li><strong>Délai de démarrage TTS</strong> — augmentez si le premier mot est coupé (selon le navigateur).</li>
     </ul>
     <h3>Contrôles de lecture</h3>
     <ul>
-      <li><strong>⏮ / ⏭</strong> — élément précédent / suivant.</li>
+      <li><strong>⏮ / ⏭</strong> — élément précédent / suivant, en conservant l'état lecture/pause.</li>
       <li><strong>⏸</strong> — pause et reprise.</li>
+      <li><strong>🔁</strong> — répète l'élément en cours en boucle à la vitesse et au délai définis. Cliquez sur <strong>▶</strong> pour arrêter la boucle et passer à la suite.</li>
       <li><strong>⏹</strong> — arrêt et réinitialisation.</li>
     </ul>`,
   zh: `
@@ -886,16 +899,18 @@ const HELP_CONTENT = {
     </ul>
     <h3>设置说明</h3>
     <ul>
-      <li><strong>模式</strong> — 逐词或逐句。</li>
+      <li><strong>模式</strong> — 逐词或逐句。逐句模式下，逗号处也会暂停。</li>
       <li><strong>暂停</strong> — 每项之间的间隔时间。</li>
       <li><strong>重复</strong> — 每项朗读次数。</li>
       <li><strong>声音</strong> — 选择设备上安装的语音。</li>
       <li><strong>语速</strong> — 加快或减慢朗读速度。</li>
+      <li><strong>TTS 启动延迟</strong> — 若每项第一个词被截断，请适当增大此值（因浏览器而异）。</li>
     </ul>
     <h3>播放控制</h3>
     <ul>
-      <li><strong>⏮ / ⏭</strong> — 上一个 / 下一个。</li>
+      <li><strong>⏮ / ⏭</strong> — 上一个 / 下一个，保持当前播放或暂停状态。</li>
       <li><strong>⏸</strong> — 暂停与继续。</li>
+      <li><strong>🔁</strong> — 以当前速度和间隔循环播放当前项。点击 <strong>▶</strong> 停止循环并继续。</li>
       <li><strong>⏹</strong> — 停止并重置。</li>
     </ul>`,
   es: `
@@ -909,16 +924,18 @@ const HELP_CONTENT = {
     </ul>
     <h3>Ajustes</h3>
     <ul>
-      <li><strong>Modo</strong> — Palabra por palabra o Frase por frase.</li>
+      <li><strong>Modo</strong> — Palabra por palabra o Frase por frase. En modo frase, también se pausa en las comas.</li>
       <li><strong>Pausa</strong> — tiempo entre elementos.</li>
       <li><strong>Repetir</strong> — veces que se repite cada elemento.</li>
       <li><strong>Voz</strong> — elige una voz instalada en tu dispositivo.</li>
       <li><strong>Velocidad</strong> — ralentiza o acelera la voz.</li>
+      <li><strong>Retardo de inicio TTS</strong> — auméntalo si se corta la primera palabra (depende del navegador).</li>
     </ul>
     <h3>Controles de reproducción</h3>
     <ul>
-      <li><strong>⏮ / ⏭</strong> — elemento anterior / siguiente.</li>
+      <li><strong>⏮ / ⏭</strong> — elemento anterior / siguiente, conservando el estado de reproducción.</li>
       <li><strong>⏸</strong> — pausa y reanuda.</li>
+      <li><strong>🔁</strong> — repite el elemento actual en bucle. Haz clic en <strong>▶</strong> para salir del bucle y avanzar.</li>
       <li><strong>⏹</strong> — detiene y reinicia.</li>
     </ul>`,
   de: `
@@ -932,16 +949,18 @@ const HELP_CONTENT = {
     </ul>
     <h3>Einstellungen</h3>
     <ul>
-      <li><strong>Modus</strong> — Wort für Wort oder Satz für Satz.</li>
+      <li><strong>Modus</strong> — Wort für Wort oder Satz für Satz. Im Satzmodus wird auch bei Kommas pausiert.</li>
       <li><strong>Pause</strong> — Abstand zwischen den Elementen.</li>
       <li><strong>Wiederholen</strong> — wie oft jedes Element gesprochen wird.</li>
       <li><strong>Stimme</strong> — eine auf dem Gerät installierte Stimme wählen.</li>
       <li><strong>Geschwindigkeit</strong> — Sprache verlangsamen oder beschleunigen.</li>
+      <li><strong>TTS-Startverzögerung</strong> — erhöhen, wenn das erste Wort abgeschnitten wird (browserabhängig).</li>
     </ul>
     <h3>Wiedergabe-Steuerung</h3>
     <ul>
-      <li><strong>⏮ / ⏭</strong> — vorheriges / nächstes Element.</li>
+      <li><strong>⏮ / ⏭</strong> — vorheriges / nächstes Element, Wiedergabe-/Pausezustand bleibt erhalten.</li>
       <li><strong>⏸</strong> — Pause und Fortsetzen.</li>
+      <li><strong>🔁</strong> — wiederholt das aktuelle Element in einer Schleife. <strong>▶</strong> klicken, um die Schleife zu beenden und weiterzumachen.</li>
       <li><strong>⏹</strong> — Stopp und Zurücksetzen.</li>
     </ul>`,
 };
@@ -1113,6 +1132,12 @@ function initSettings() {
     $('repeat-val').textContent = repeatCount;
   });
 
+  const ttsDelaySlider = $('tts-delay-slider');
+  ttsDelaySlider.addEventListener('input', () => {
+    ttsDelay = parseInt(ttsDelaySlider.value);
+    $('tts-delay-val').textContent = ttsDelay;
+  });
+
   const rateSlider = $('rate-slider');
   rateSlider.addEventListener('input', () => {
     speechRate = parseFloat(rateSlider.value);
@@ -1190,16 +1215,17 @@ function loadBrowserVoices() {
 function initPlayback() {
   $('play-btn').addEventListener('click', startDictation);
   $('pause-btn').addEventListener('click', togglePause);
+  $('repeat-btn').addEventListener('click', repeatCurrent);
   $('stop-btn').addEventListener('click', stopDictation);
-  $('prev-btn').addEventListener('click', () => jumpTo(currentIndex - 1));
-  $('next-btn').addEventListener('click', () => jumpTo(currentIndex + 1));
+  $('prev-btn').addEventListener('click', () => jumpTo(currentIndex - 1, isPaused));
+  $('next-btn').addEventListener('click', () => jumpTo(currentIndex + 1, isPaused));
   $('reveal-btn').addEventListener('click', toggleReveal);
 }
 
 function parseContent(text, mode) {
   if (mode === 'sentence') {
     return text
-      .replace(/([.!?])\s+/g, '$1\n')
+      .replace(/([.!?,])\s+/g, '$1\n')
       .split('\n')
       .map(s => s.trim())
       .filter(s => s.length > 1);
@@ -1208,6 +1234,9 @@ function parseContent(text, mode) {
 }
 
 async function startDictation() {
+  if (isPlaying && isPaused) { togglePause(); return; }
+  if (isRepeating) { advanceFromRepeat(); return; }
+
   const text = $('text-input').value.trim();
   if (!text) { alert(t('alertNoText')); return; }
 
@@ -1216,33 +1245,35 @@ async function startDictation() {
 
   currentIndex = 0;
   isPlaying = true;
+  isRepeating = false;
   isPaused = false;
-  stopRequested = false;
+  const gen = ++dictationGen;
 
-  setPlaybackButtons(true);
-  await runDictation();
+  updateButtons();
+  await runDictation(gen);
 }
 
-async function runDictation() {
-  while (currentIndex < dictationItems.length && !stopRequested) {
+async function runDictation(gen) {
+  while (currentIndex < dictationItems.length && dictationGen === gen) {
     updateDisplay(currentIndex);
     const item = dictationItems[currentIndex];
 
-    for (let r = 0; r < repeatCount && !stopRequested; r++) {
+    for (let r = 0; r < repeatCount && dictationGen === gen; r++) {
       if (isPaused) await waitForResume();
-      if (stopRequested) break;
+      if (dictationGen !== gen) break;
       await speakItem(item);
     }
 
-    if (!stopRequested) {
-      currentIndex++;
-      if (currentIndex < dictationItems.length) {
-        await sleep(pauseDuration);
-      }
+    if (dictationGen !== gen) break;
+
+    if (currentIndex + 1 < dictationItems.length) {
+      await sleep(pauseDuration);
     }
+    if (dictationGen !== gen) break;
+    currentIndex++;
   }
 
-  if (!stopRequested) finishDictation();
+  if (dictationGen === gen) finishDictation();
 }
 
 async function speakItem(item) {
@@ -1251,11 +1282,17 @@ async function speakItem(item) {
 
 function speakTTS(text) {
   return new Promise(resolve => {
-    speechSynthesis.cancel();
+    // Silent warm-up utterance keeps the TTS engine active so the first word isn't clipped
+    const warmup = new SpeechSynthesisUtterance('.');
+    warmup.volume = 0;
+    warmup.rate = 10;
+    if (selectedVoice) { warmup.voice = selectedVoice; warmup.lang = selectedVoice.lang; }
+    speechSynthesis.speak(warmup);
+
     const utter = new SpeechSynthesisUtterance(text);
     if (selectedVoice) {
       utter.voice = selectedVoice;
-      utter.lang = selectedVoice.lang; // required on Android to override system default
+      utter.lang = selectedVoice.lang;
     }
     utter.rate = speechRate;
     utter.onend = resolve;
@@ -1275,24 +1312,36 @@ function waitForResume() {
   return new Promise(resolve => { pauseResolve = resolve; });
 }
 
-function togglePause() {
-  if (!isPlaying) return;
-  isPaused = !isPaused;
+function updateButtons() {
+  const playing = isPlaying || isRepeating;
+  // play: enabled when stopped, or when repeating (to advance), or when paused (to resume)
+  $('play-btn').disabled = playing && !isRepeating && !isPaused;
+  $('pause-btn').disabled = !playing;
   $('pause-btn').textContent = isPaused ? t('btnResume') : '⏸';
+  $('repeat-btn').disabled = !playing;
+  $('repeat-btn').classList.toggle('active', isRepeating);
+  $('stop-btn').disabled = !playing;
+}
+
+function togglePause() {
+  if (!isPlaying && !isRepeating) return;
+  isPaused = !isPaused;
   if (!isPaused && pauseResolve) {
     const r = pauseResolve;
     pauseResolve = null;
     r();
   }
+  updateButtons();
 }
 
 function stopDictation() {
-  stopRequested = true;
+  dictationGen++;
   isPlaying = false;
   isPaused = false;
+  isRepeating = false;
   speechSynthesis.cancel();
   if (pauseResolve) { pauseResolve(); pauseResolve = null; }
-  setPlaybackButtons(false);
+  updateButtons();
   $('current-item').textContent = '—';
   $('progress-text').textContent = '0 / 0';
   $('progress-bar').style.width = '0%';
@@ -1300,18 +1349,55 @@ function stopDictation() {
 
 function finishDictation() {
   isPlaying = false;
-  setPlaybackButtons(false);
+  isRepeating = false;
+  updateButtons();
 }
 
-function jumpTo(index) {
+function jumpTo(index, startPaused = false) {
   if (index < 0 || index >= dictationItems.length) return;
   currentIndex = index;
-  stopRequested = true;
+  isRepeating = false;
   speechSynthesis.cancel();
   if (pauseResolve) { pauseResolve(); pauseResolve = null; }
-  stopRequested = false;
+  const gen = ++dictationGen;
+  isPaused = startPaused;
+  updateButtons();
+  runDictation(gen);
+}
+
+async function repeatCurrent() {
+  if (!isPlaying && !isRepeating) return;
+  isRepeating = true;
+  isPlaying = false;
+  speechSynthesis.cancel();
+  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  const gen = ++dictationGen;
   isPaused = false;
-  runDictation();
+  updateButtons();
+  const item = dictationItems[currentIndex];
+  while (dictationGen === gen) {
+    if (isPaused) await waitForResume();
+    if (dictationGen !== gen) break;
+    await speakItem(item);
+    if (dictationGen !== gen) break;
+    await sleep(pauseDuration);
+  }
+  if (dictationGen === gen) {
+    isRepeating = false;
+    updateButtons();
+  }
+}
+
+function advanceFromRepeat() {
+  isRepeating = false;
+  isPlaying = true;
+  speechSynthesis.cancel();
+  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  currentIndex++;
+  const gen = ++dictationGen;
+  isPaused = false;
+  updateButtons();
+  runDictation(gen);
 }
 
 function updateDisplay(index) {
@@ -1326,13 +1412,6 @@ function updateDisplay(index) {
   $('progress-bar').style.width = ((index + 1) / total * 100) + '%';
   $('prev-btn').disabled = index === 0;
   $('next-btn').disabled = index >= total - 1;
-}
-
-function setPlaybackButtons(playing) {
-  $('play-btn').disabled = playing;
-  $('pause-btn').disabled = !playing;
-  $('stop-btn').disabled = !playing;
-  if (!playing) $('pause-btn').textContent = '⏸';
 }
 
 function toggleReveal() {
