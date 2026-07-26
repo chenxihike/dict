@@ -300,36 +300,48 @@ select:focus { outline: 2px solid var(--primary); border-color: transparent; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid transparent;
+  border: none;
   border-radius: 8px;
   padding: 8px 16px;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background .15s, opacity .15s, transform .1s;
+  transition: background .15s, opacity .15s, transform .08s, box-shadow .08s;
   white-space: nowrap;
   min-height: 44px;
   min-width: 44px;
   font-family: inherit;
+  position: relative;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.15);
+  top: 0;
 }
 
-.btn:active { transform: scale(0.96); }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btn:hover:not(:disabled) { box-shadow: 0 5px 0 rgba(0,0,0,0.25), 0 3px 8px rgba(0,0,0,0.15); top: -1px; }
+.btn:active:not(:disabled) { box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.15); top: 3px; transform: none; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: 0 2px 0 rgba(0,0,0,0.15); }
 
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-primary { background: linear-gradient(to bottom, #5b9cff, var(--primary)); color: #fff; box-shadow: 0 4px 0 #2a5fc7, 0 2px 6px rgba(0,0,0,0.2); }
+.btn-primary:hover:not(:disabled) { background: linear-gradient(to bottom, #6fa8ff, var(--primary-hover)); box-shadow: 0 5px 0 #2a5fc7, 0 3px 8px rgba(0,0,0,0.2); }
+.btn-primary:active:not(:disabled) { box-shadow: 0 1px 0 #2a5fc7, 0 1px 3px rgba(0,0,0,0.2); }
 
-.btn-secondary { background: var(--bg); border-color: var(--border); color: var(--text); }
-.btn-secondary:hover:not(:disabled) { background: #e9ecf0; }
+.btn-secondary { background: linear-gradient(to bottom, #fff, #e9ecf0); color: var(--text); box-shadow: 0 4px 0 #b0b8c4, 0 2px 6px rgba(0,0,0,0.15); }
+.btn-secondary:hover:not(:disabled) { background: linear-gradient(to bottom, #f5f7fa, #dde2e8); box-shadow: 0 5px 0 #b0b8c4, 0 3px 8px rgba(0,0,0,0.15); }
+.btn-secondary:active:not(:disabled) { box-shadow: 0 1px 0 #b0b8c4, 0 1px 3px rgba(0,0,0,0.15); }
 
-.btn-danger { background: var(--danger); color: #fff; }
-.btn-danger:hover:not(:disabled) { background: var(--danger-hover); }
+.btn-danger { background: linear-gradient(to bottom, #f97, var(--danger)); color: #fff; box-shadow: 0 4px 0 #a01d2a, 0 2px 6px rgba(0,0,0,0.2); }
+.btn-danger:hover:not(:disabled) { background: linear-gradient(to bottom, #fa9, var(--danger-hover)); box-shadow: 0 5px 0 #a01d2a, 0 3px 8px rgba(0,0,0,0.2); }
+.btn-danger:active:not(:disabled) { box-shadow: 0 1px 0 #a01d2a, 0 1px 3px rgba(0,0,0,0.2); }
 
-.btn-ghost { background: none; color: var(--text-muted); }
-.btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+.btn-ghost { background: none; color: var(--text-muted); box-shadow: none; }
+.btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); box-shadow: 0 3px 0 rgba(0,0,0,0.15), 0 2px 5px rgba(0,0,0,0.1); }
+.btn-ghost:active:not(:disabled) { box-shadow: 0 1px 0 rgba(0,0,0,0.1); top: 2px; }
 
-.btn-icon { font-size: 1.3rem; padding: 8px 14px; }
-#repeat-btn.active { background: var(--primary); color: #fff; }
+.btn-icon { font-size: 1.3rem; padding: 8px 14px; background: linear-gradient(to bottom, #fff, #e9ecf0); color: var(--text); box-shadow: 0 4px 0 #b0b8c4, 0 2px 6px rgba(0,0,0,0.15); }
+.btn-icon:hover:not(:disabled) { background: linear-gradient(to bottom, #f5f7fa, #dde2e8); box-shadow: 0 5px 0 #b0b8c4, 0 3px 8px rgba(0,0,0,0.15); }
+.btn-icon:active:not(:disabled) { box-shadow: 0 1px 0 #b0b8c4, 0 1px 3px rgba(0,0,0,0.15); }
+#repeat-btn.active { background: linear-gradient(to bottom, #5b9cff, var(--primary)); color: #fff; box-shadow: 0 4px 0 #2a5fc7, 0 2px 6px rgba(0,0,0,0.2); }
+#repeat-btn.active:hover:not(:disabled) { background: linear-gradient(to bottom, #6fa8ff, var(--primary-hover)); box-shadow: 0 5px 0 #2a5fc7, 0 3px 8px rgba(0,0,0,0.2); }
+#repeat-btn.active:active:not(:disabled) { box-shadow: 0 1px 0 #2a5fc7; }
 .btn-sm { font-size: 0.8rem; padding: 5px 12px; min-height: 34px; }
 .btn-lg { font-size: 1.1rem; padding: 14px 28px; min-height: 52px; }
 
@@ -576,7 +588,6 @@ select:focus { outline: 2px solid var(--primary); border-color: transparent; }
       <div class="controls">
         <button id="prev-btn" class="btn btn-icon" title="Previous" disabled>⏮</button>
         <button id="play-btn" class="btn btn-primary btn-icon" title="Play">▶</button>
-        <button id="pause-btn" class="btn btn-icon" title="Pause" disabled>⏸</button>
         <button id="repeat-btn" class="btn btn-icon" title="Repeat current" disabled>🔁</button>
         <button id="stop-btn" class="btn btn-icon" title="Stop" disabled>⏹</button>
         <button id="next-btn" class="btn btn-icon" title="Next" disabled>⏭</button>
@@ -1114,9 +1125,31 @@ function readFile(file) {
 function initSettings() {
   qsa('.toggle-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.mode === dictationMode) return;
       qsa('.toggle-btn[data-mode]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       dictationMode = btn.dataset.mode;
+      if (isPlaying && dictationItems.length) {
+        const oldItems = dictationItems;
+        const oldIndex = currentIndex;
+        const text = $('text-input').value.trim();
+        dictationItems = parseContent(text, dictationMode);
+        if (dictationMode === 'word') {
+          // sentence→word: count words in all preceding sentences to find start of current sentence
+          const wordsBefore = oldItems.slice(0, oldIndex)
+            .reduce((n, s) => n + s.split(/\s+/).filter(w => w).length, 0);
+          currentIndex = Math.min(wordsBefore, dictationItems.length - 1);
+        } else {
+          // word→sentence: find the sentence that contains the current word
+          const word = oldItems[oldIndex];
+          const match = dictationItems.findIndex(s => s.includes(word));
+          currentIndex = match >= 0 ? match : 0;
+        }
+        cancelLoop();
+        const gen = ++dictationGen;
+        updateButtons();
+        runLoop(gen);
+      }
     });
   });
 
@@ -1212,13 +1245,13 @@ function loadBrowserVoices() {
 
 
 // ----- Playback engine -----
+// Single source of truth: isPlaying = loop is running, isRepeating = loop behaviour flag only.
 function initPlayback() {
-  $('play-btn').addEventListener('click', startDictation);
-  $('pause-btn').addEventListener('click', togglePause);
-  $('repeat-btn').addEventListener('click', repeatCurrent);
+  $('play-btn').addEventListener('click', handlePlayPause);
+  $('repeat-btn').addEventListener('click', toggleRepeat);
   $('stop-btn').addEventListener('click', stopDictation);
-  $('prev-btn').addEventListener('click', () => jumpTo(currentIndex - 1, isPaused));
-  $('next-btn').addEventListener('click', () => jumpTo(currentIndex + 1, isPaused));
+  $('prev-btn').addEventListener('click', () => jumpTo(currentIndex - 1));
+  $('next-btn').addEventListener('click', () => jumpTo(currentIndex + 1));
   $('reveal-btn').addEventListener('click', toggleReveal);
 }
 
@@ -1233,47 +1266,58 @@ function parseContent(text, mode) {
   return text.split(/\s+/).filter(w => w.length > 0);
 }
 
-async function startDictation() {
-  if (isPlaying && isPaused) { togglePause(); return; }
-  if (isRepeating) { advanceFromRepeat(); return; }
-
-  const text = $('text-input').value.trim();
-  if (!text) { alert(t('alertNoText')); return; }
-
-  dictationItems = parseContent(text, dictationMode);
-  if (!dictationItems.length) return;
-
-  currentIndex = 0;
-  isPlaying = true;
-  isRepeating = false;
-  isPaused = false;
-  const gen = ++dictationGen;
-
-  updateButtons();
-  await runDictation(gen);
+function handlePlayPause() {
+  if (!isPlaying) { startDictation(); return; }
+  togglePause();
 }
 
-async function runDictation(gen) {
-  while (currentIndex < dictationItems.length && dictationGen === gen) {
+async function startDictation() {
+  const text = $('text-input').value.trim();
+  if (!text) { alert(t('alertNoText')); return; }
+  dictationItems = parseContent(text, dictationMode);
+  if (!dictationItems.length) return;
+  currentIndex = 0;
+  isPlaying = true;
+  isPaused = false;
+  speechSynthesis.cancel();
+  const gen = ++dictationGen;
+  updateButtons();
+  await runLoop(gen);
+}
+
+// One loop for both normal and repeat mode. isRepeating is just a flag it reads.
+async function runLoop(gen) {
+  while (dictationGen === gen) {
     updateDisplay(currentIndex);
-    const item = dictationItems[currentIndex];
+    if (isPaused) await waitForResume();
+    if (dictationGen !== gen) break;
 
     for (let r = 0; r < repeatCount && dictationGen === gen; r++) {
       if (isPaused) await waitForResume();
       if (dictationGen !== gen) break;
-      await speakItem(item);
+      await speakItem(dictationItems[currentIndex]);
+      if (dictationGen !== gen) break;
+      if (r + 1 < repeatCount) await sleep(pauseDuration);
     }
 
     if (dictationGen !== gen) break;
 
-    if (currentIndex + 1 < dictationItems.length) {
+    if (isRepeating) {
       await sleep(pauseDuration);
+      // stay on same index — loop back to top
+    } else {
+      if (currentIndex + 1 >= dictationItems.length) break;
+      await sleep(pauseDuration);
+      if (dictationGen !== gen) break;
+      currentIndex++;
     }
-    if (dictationGen !== gen) break;
-    currentIndex++;
   }
 
-  if (dictationGen === gen) finishDictation();
+  if (dictationGen === gen) {
+    isPlaying = false;
+    isRepeating = false;
+    updateButtons();
+  }
 }
 
 async function speakItem(item) {
@@ -1282,22 +1326,23 @@ async function speakItem(item) {
 
 function speakTTS(text) {
   return new Promise(resolve => {
-    // Silent warm-up utterance keeps the TTS engine active so the first word isn't clipped
+    function speakMain() {
+      const utter = new SpeechSynthesisUtterance(text);
+      if (selectedVoice) { utter.voice = selectedVoice; utter.lang = selectedVoice.lang; }
+      utter.rate = speechRate;
+      utter.onend = resolve;
+      utter.onerror = resolve;
+      speechSynthesis.speak(utter);
+    }
+    // Queue main utterance only after warmup ends so the TTS engine is fully
+    // initialized before the first real word plays (fixes first-click silence).
     const warmup = new SpeechSynthesisUtterance('.');
     warmup.volume = 0;
     warmup.rate = 10;
     if (selectedVoice) { warmup.voice = selectedVoice; warmup.lang = selectedVoice.lang; }
+    warmup.onend = speakMain;
+    warmup.onerror = speakMain;
     speechSynthesis.speak(warmup);
-
-    const utter = new SpeechSynthesisUtterance(text);
-    if (selectedVoice) {
-      utter.voice = selectedVoice;
-      utter.lang = selectedVoice.lang;
-    }
-    utter.rate = speechRate;
-    utter.onend = resolve;
-    utter.onerror = resolve;
-    speechSynthesis.speak(utter);
   });
 }
 
@@ -1312,25 +1357,48 @@ function waitForResume() {
   return new Promise(resolve => { pauseResolve = resolve; });
 }
 
+function cancelLoop() {
+  speechSynthesis.cancel();
+  if (pauseResolve) { const r = pauseResolve; pauseResolve = null; r(); }
+}
+
 function updateButtons() {
-  const playing = isPlaying || isRepeating;
-  // play: enabled when stopped, or when repeating (to advance), or when paused (to resume)
-  $('play-btn').disabled = playing && !isRepeating && !isPaused;
-  $('pause-btn').disabled = !playing;
-  $('pause-btn').textContent = isPaused ? t('btnResume') : '⏸';
-  $('repeat-btn').disabled = !playing;
+  const playBtn = $('play-btn');
+  if (isPlaying && !isPaused) {
+    playBtn.textContent = '⏸';
+    playBtn.title = 'Pause';
+  } else {
+    playBtn.textContent = '▶';
+    playBtn.title = isPaused ? 'Resume' : 'Play';
+  }
+  playBtn.disabled = false;
+  $('repeat-btn').disabled = !isPlaying;
   $('repeat-btn').classList.toggle('active', isRepeating);
-  $('stop-btn').disabled = !playing;
+  $('repeat-btn').title = isRepeating ? 'Stop repeating' : 'Repeat current';
+  $('stop-btn').disabled = !isPlaying;
+  if (!isPlaying) {
+    $('prev-btn').disabled = true;
+    $('next-btn').disabled = true;
+  }
 }
 
 function togglePause() {
-  if (!isPlaying && !isRepeating) return;
+  if (!isPlaying) return;
   isPaused = !isPaused;
-  if (!isPaused && pauseResolve) {
-    const r = pauseResolve;
-    pauseResolve = null;
-    r();
+  if (isPaused) {
+    speechSynthesis.pause();
+    // interrupt inter-item sleep so loop parks at waitForResume immediately
+    if (pauseResolve) { const r = pauseResolve; pauseResolve = null; r(); }
+  } else {
+    speechSynthesis.resume();
+    if (pauseResolve) { const r = pauseResolve; pauseResolve = null; r(); }
   }
+  updateButtons();
+}
+
+function toggleRepeat() {
+  if (!isPlaying) return;
+  isRepeating = !isRepeating;
   updateButtons();
 }
 
@@ -1339,65 +1407,21 @@ function stopDictation() {
   isPlaying = false;
   isPaused = false;
   isRepeating = false;
-  speechSynthesis.cancel();
-  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  cancelLoop();
   updateButtons();
   $('current-item').textContent = '—';
   $('progress-text').textContent = '0 / 0';
   $('progress-bar').style.width = '0%';
 }
 
-function finishDictation() {
-  isPlaying = false;
-  isRepeating = false;
-  updateButtons();
-}
-
-function jumpTo(index, startPaused = false) {
+function jumpTo(index) {
   if (index < 0 || index >= dictationItems.length) return;
   currentIndex = index;
-  isRepeating = false;
-  speechSynthesis.cancel();
-  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
-  const gen = ++dictationGen;
-  isPaused = startPaused;
-  updateButtons();
-  runDictation(gen);
-}
-
-async function repeatCurrent() {
-  if (!isPlaying && !isRepeating) return;
-  isRepeating = true;
-  isPlaying = false;
-  speechSynthesis.cancel();
-  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
-  const gen = ++dictationGen;
-  isPaused = false;
-  updateButtons();
-  const item = dictationItems[currentIndex];
-  while (dictationGen === gen) {
-    if (isPaused) await waitForResume();
-    if (dictationGen !== gen) break;
-    await speakItem(item);
-    if (dictationGen !== gen) break;
-    await sleep(pauseDuration);
-  }
-  if (dictationGen === gen) {
-    isRepeating = false;
-    updateButtons();
-  }
-}
-
-function advanceFromRepeat() {
-  isRepeating = false;
   isPlaying = true;
-  speechSynthesis.cancel();
-  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
-  currentIndex++;
+  cancelLoop();
   const gen = ++dictationGen;
-  isPaused = false;
   updateButtons();
-  runDictation(gen);
+  runLoop(gen);
 }
 
 function updateDisplay(index) {
